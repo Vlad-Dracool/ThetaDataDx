@@ -1,0 +1,1024 @@
+//! Direct server client — MDDS gRPC without the Java terminal.
+//!
+//! `DirectClient` authenticates against the Nexus API, opens a gRPC channel
+//! to the MDDS server, and exposes typed methods for every data endpoint.
+//!
+//! # Architecture
+//!
+//! ```text
+//! Credentials ──► nexus::authenticate() ──► SessionToken
+//!                                              │
+//!              ┌───────────────────────────────┘
+//!              │
+//!       DirectClient
+//!        ├── mdds_stub: BetaThetaTerminalClient  (gRPC, historical data)
+//!        └── session: SessionToken               (UUID in every QueryInfo)
+//! ```
+//!
+//! Every MDDS request wraps parameters in a `QueryInfo` that carries the session
+//! UUID obtained from Nexus auth. Responses are `stream ResponseData` — zstd-
+//! compressed `DataTable` payloads decoded by [`crate::decode`].
+
+use std::collections::HashMap;
+use std::time::Duration;
+
+use tokio_stream::StreamExt;
+
+use crate::auth::{self, Credentials, SessionToken};
+use crate::config::DirectConfig;
+use crate::decode;
+use crate::error::Error;
+use crate::proto;
+use crate::proto_v3;
+use crate::proto_v3::beta_theta_terminal_client::BetaThetaTerminalClient;
+use crate::types::tick::*;
+
+/// Crate version embedded in `QueryInfo.terminal_version` so ThetaData can
+/// identify this client in server-side logs.
+const CLIENT_TYPE: &str = "rust-thetadatadx";
+
+/// Version string sent in `QueryInfo.terminal_version`.
+const TERMINAL_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Direct client for ThetaData server access.
+///
+/// Connects to MDDS (gRPC, historical data) without requiring the Java
+/// terminal. Authenticates via the Nexus HTTP API, then issues gRPC
+/// requests to the upstream MDDS server.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use thetadatadx::{DirectClient, Credentials, DirectConfig};
+///
+/// # async fn run() -> Result<(), thetadatadx::Error> {
+/// let creds = Credentials::from_file("creds.txt")?;
+/// let client = DirectClient::connect(&creds, DirectConfig::production()).await?;
+///
+/// let eod = client.stock_history_eod("AAPL", "20240101", "20240301").await?;
+/// println!("{} EOD ticks", eod.len());
+/// # Ok(())
+/// # }
+/// ```
+pub struct DirectClient {
+    /// Session token from Nexus auth (UUID embedded in every request).
+    session: SessionToken,
+    /// gRPC channel to MDDS server.
+    channel: tonic::transport::Channel,
+    /// Configuration snapshot (retained for diagnostics/reconnect).
+    config: DirectConfig,
+}
+
+impl DirectClient {
+    /// Connect to ThetaData servers directly (no JVM terminal needed).
+    ///
+    /// 1. Authenticates against the Nexus HTTP API to obtain a session UUID.
+    /// 2. Opens a gRPC channel (TLS) to the MDDS server.
+    ///
+    /// The FPSS (real-time streaming) connection is not established here;
+    /// it will be added in a future release.
+    pub async fn connect(creds: &Credentials, config: DirectConfig) -> Result<Self, Error> {
+        // Step 1: Authenticate against Nexus API.
+        tracing::info!(mdds = %config.mdds_uri(), "authenticating with Nexus API");
+        let auth_resp = auth::authenticate(creds).await?;
+        let session = SessionToken::from_response(&auth_resp)?;
+
+        tracing::debug!(
+            session_id_prefix = %&session.session_uuid[..8.min(session.session_uuid.len())],
+            subscription = ?auth_resp.user.as_ref().and_then(|u| u.subscription_level.as_deref()),
+            "session established (session_id redacted)"
+        );
+
+        // Step 2: Open gRPC channel to MDDS.
+        let mdds_uri = config.mdds_uri();
+        tracing::debug!(uri = %mdds_uri, "connecting to MDDS gRPC");
+
+        let endpoint = tonic::transport::Channel::from_shared(mdds_uri.clone())
+            .map_err(|e| Error::Config(format!("invalid MDDS URI '{mdds_uri}': {e}")))?
+            .keep_alive_timeout(Duration::from_secs(config.mdds_keepalive_timeout_secs))
+            .http2_keep_alive_interval(Duration::from_secs(config.mdds_keepalive_secs))
+            .connect_timeout(Duration::from_secs(10));
+
+        let endpoint = if config.mdds_tls {
+            endpoint.tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())?
+        } else {
+            endpoint
+        };
+
+        let channel = endpoint.connect().await?;
+        tracing::info!("MDDS gRPC channel connected");
+
+        Ok(Self {
+            session,
+            channel,
+            config,
+        })
+    }
+
+    /// Build a fresh `QueryInfo` for every gRPC request.
+    ///
+    /// Embeds the session UUID, client type, and version. The `query_parameters`
+    /// map is left empty — individual endpoints populate it via their typed
+    /// `params` field instead.
+    fn query_info(&self) -> proto_v3::QueryInfo {
+        proto_v3::QueryInfo {
+            auth_token: Some(proto::AuthToken {
+                session_uuid: self.session.session_uuid.clone(),
+            }),
+            query_parameters: HashMap::new(),
+            client_type: CLIENT_TYPE.to_string(),
+            terminal_git_commit: String::new(),
+            terminal_version: TERMINAL_VERSION.to_string(),
+        }
+    }
+
+    /// Create a new gRPC stub from the shared channel.
+    ///
+    /// Tonic channels are cheap to clone (internally Arc'd), and stubs take
+    /// `&mut self` for each call, so we mint a fresh stub per request to
+    /// allow concurrent requests without external `Mutex`.
+    fn stub(&self) -> BetaThetaTerminalClient<tonic::transport::Channel> {
+        BetaThetaTerminalClient::new(self.channel.clone())
+            // MDDS can return large DataTables (e.g. full day of trades).
+            // Uses the config-specified max message size.
+            .max_decoding_message_size(self.config.mdds_max_message_size)
+    }
+
+    /// Collect all streamed `ResponseData` chunks into a single `DataTable`.
+    ///
+    /// MDDS returns server-streaming responses where each chunk is a zstd-
+    /// compressed `DataTable`. This helper decompresses, decodes, and merges
+    /// all chunks into one contiguous table.
+    async fn collect_stream(
+        &self,
+        mut stream: tonic::Streaming<proto::ResponseData>,
+    ) -> Result<proto::DataTable, Error> {
+        let mut all_rows = Vec::new();
+        let mut headers = Vec::new();
+
+        while let Some(response) = stream.next().await {
+            let response = response?;
+            let table = decode::decode_data_table(&response)?;
+            if headers.is_empty() {
+                headers = table.headers;
+            }
+            all_rows.extend(table.data_table);
+        }
+
+        if headers.is_empty() {
+            return Err(Error::NoData);
+        }
+
+        Ok(proto::DataTable {
+            headers,
+            data_table: all_rows,
+        })
+    }
+
+    /// Return a reference to the underlying config for diagnostics.
+    pub fn config(&self) -> &DirectConfig {
+        &self.config
+    }
+
+    /// Return the session UUID string.
+    pub fn session_uuid(&self) -> &str {
+        &self.session.session_uuid
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Stock — List endpoints
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// List all available stock symbols.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetStockListSymbols`
+    pub async fn stock_list_symbols(&self) -> Result<Vec<String>, Error> {
+        tracing::debug!("stock_list_symbols");
+        let request = proto_v3::StockListSymbolsRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::StockListSymbolsRequestQuery {}),
+        };
+
+        let stream = self
+            .stub()
+            .get_stock_list_symbols(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(decode::extract_text_column(&table, "symbol")
+            .into_iter()
+            .flatten()
+            .collect())
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Stock — History endpoints
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// Fetch end-of-day stock data for a date range.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetStockHistoryEod`
+    ///
+    /// Dates are `YYYYMMDD` strings (e.g. `"20240101"`).
+    pub async fn stock_history_eod(
+        &self,
+        symbol: &str,
+        start: &str,
+        end: &str,
+    ) -> Result<Vec<EodTick>, Error> {
+        validate_date(start)?;
+        validate_date(end)?;
+        tracing::debug!(symbol, start, end, "stock_history_eod");
+        let request = proto_v3::StockHistoryEodRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::StockHistoryEodRequestQuery {
+                symbol: symbol.to_string(),
+                start_date: start.to_string(),
+                end_date: end.to_string(),
+            }),
+        };
+
+        let stream = self
+            .stub()
+            .get_stock_history_eod(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(parse_eod_from_table(&table))
+    }
+
+    /// Fetch intraday OHLC bars for a stock.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetStockHistoryOhlc`
+    ///
+    /// `interval` is in milliseconds (e.g. `"60000"` for 1-minute bars).
+    /// `date` is `YYYYMMDD` for a single day, or use `start_date`/`end_date`
+    /// via [`stock_history_ohlc_range`] for multi-day queries.
+    pub async fn stock_history_ohlc(
+        &self,
+        symbol: &str,
+        date: &str,
+        interval: &str,
+    ) -> Result<Vec<OhlcTick>, Error> {
+        validate_date(date)?;
+        tracing::debug!(symbol, date, interval, "stock_history_ohlc");
+        let request = proto_v3::StockHistoryOhlcRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::StockHistoryOhlcRequestQuery {
+                symbol: symbol.to_string(),
+                date: Some(date.to_string()),
+                interval: interval.to_string(),
+                start_time: None,
+                end_time: None,
+                venue: None,
+                start_date: None,
+                end_date: None,
+            }),
+        };
+
+        let stream = self
+            .stub()
+            .get_stock_history_ohlc(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(decode::parse_ohlc_ticks(&table))
+    }
+
+    /// Fetch intraday OHLC bars across a date range.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetStockHistoryOhlc`
+    ///
+    /// Uses `start_date`/`end_date` instead of single `date`.
+    pub async fn stock_history_ohlc_range(
+        &self,
+        symbol: &str,
+        start_date: &str,
+        end_date: &str,
+        interval: &str,
+    ) -> Result<Vec<OhlcTick>, Error> {
+        validate_date(start_date)?;
+        validate_date(end_date)?;
+        tracing::debug!(
+            symbol,
+            start_date,
+            end_date,
+            interval,
+            "stock_history_ohlc_range"
+        );
+        let request = proto_v3::StockHistoryOhlcRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::StockHistoryOhlcRequestQuery {
+                symbol: symbol.to_string(),
+                date: None,
+                interval: interval.to_string(),
+                start_time: None,
+                end_time: None,
+                venue: None,
+                start_date: Some(start_date.to_string()),
+                end_date: Some(end_date.to_string()),
+            }),
+        };
+
+        let stream = self
+            .stub()
+            .get_stock_history_ohlc(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(decode::parse_ohlc_ticks(&table))
+    }
+
+    /// Fetch all trades for a stock on a given date.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetStockHistoryTrade`
+    pub async fn stock_history_trade(
+        &self,
+        symbol: &str,
+        date: &str,
+    ) -> Result<Vec<TradeTick>, Error> {
+        validate_date(date)?;
+        tracing::debug!(symbol, date, "stock_history_trade");
+        let request = proto_v3::StockHistoryTradeRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::StockHistoryTradeRequestQuery {
+                symbol: symbol.to_string(),
+                date: Some(date.to_string()),
+                start_time: None,
+                end_time: None,
+                venue: None,
+                start_date: None,
+                end_date: None,
+            }),
+        };
+
+        let stream = self
+            .stub()
+            .get_stock_history_trade(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(decode::parse_trade_ticks(&table))
+    }
+
+    /// Fetch NBBO quotes for a stock on a given date at a given interval.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetStockHistoryQuote`
+    ///
+    /// `interval` is in milliseconds (e.g. `"0"` for every quote change).
+    pub async fn stock_history_quote(
+        &self,
+        symbol: &str,
+        date: &str,
+        interval: &str,
+    ) -> Result<Vec<QuoteTick>, Error> {
+        validate_date(date)?;
+        tracing::debug!(symbol, date, interval, "stock_history_quote");
+        let request = proto_v3::StockHistoryQuoteRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::StockHistoryQuoteRequestQuery {
+                symbol: symbol.to_string(),
+                date: Some(date.to_string()),
+                interval: interval.to_string(),
+                start_time: None,
+                end_time: None,
+                venue: None,
+                start_date: None,
+                end_date: None,
+            }),
+        };
+
+        let stream = self
+            .stub()
+            .get_stock_history_quote(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(decode::parse_quote_ticks(&table))
+    }
+
+    /// Fetch combined trade + quote ticks for a stock on a given date.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetStockHistoryTradeQuote`
+    pub async fn stock_history_trade_quote(
+        &self,
+        symbol: &str,
+        date: &str,
+    ) -> Result<proto::DataTable, Error> {
+        validate_date(date)?;
+        tracing::debug!(symbol, date, "stock_history_trade_quote");
+        let request = proto_v3::StockHistoryTradeQuoteRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::StockHistoryTradeQuoteRequestQuery {
+                symbol: symbol.to_string(),
+                date: Some(date.to_string()),
+                start_time: None,
+                end_time: None,
+                exclusive: None,
+                venue: None,
+                start_date: None,
+                end_date: None,
+            }),
+        };
+
+        let stream = self
+            .stub()
+            .get_stock_history_trade_quote(request)
+            .await?
+            .into_inner();
+
+        self.collect_stream(stream).await
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Stock — Snapshot endpoints
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// Get the latest NBBO quote snapshot for one or more stocks.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetStockSnapshotQuote`
+    pub async fn stock_snapshot_quote(&self, symbols: &[&str]) -> Result<Vec<QuoteTick>, Error> {
+        tracing::debug!(?symbols, "stock_snapshot_quote");
+        let request = proto_v3::StockSnapshotQuoteRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::StockSnapshotQuoteRequestQuery {
+                symbol: symbols.iter().map(|s| s.to_string()).collect(),
+                venue: None,
+                min_time: None,
+            }),
+        };
+
+        let stream = self
+            .stub()
+            .get_stock_snapshot_quote(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(decode::parse_quote_ticks(&table))
+    }
+
+    /// Get the latest OHLC snapshot for one or more stocks.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetStockSnapshotOhlc`
+    pub async fn stock_snapshot_ohlc(&self, symbols: &[&str]) -> Result<Vec<OhlcTick>, Error> {
+        tracing::debug!(?symbols, "stock_snapshot_ohlc");
+        let request = proto_v3::StockSnapshotOhlcRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::StockSnapshotOhlcRequestQuery {
+                symbol: symbols.iter().map(|s| s.to_string()).collect(),
+                venue: None,
+                min_time: None,
+            }),
+        };
+
+        let stream = self
+            .stub()
+            .get_stock_snapshot_ohlc(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(decode::parse_ohlc_ticks(&table))
+    }
+
+    /// Get the latest trade snapshot for one or more stocks.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetStockSnapshotTrade`
+    pub async fn stock_snapshot_trade(&self, symbols: &[&str]) -> Result<Vec<TradeTick>, Error> {
+        tracing::debug!(?symbols, "stock_snapshot_trade");
+        let request = proto_v3::StockSnapshotTradeRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::StockSnapshotTradeRequestQuery {
+                symbol: symbols.iter().map(|s| s.to_string()).collect(),
+                venue: None,
+                min_time: None,
+            }),
+        };
+
+        let stream = self
+            .stub()
+            .get_stock_snapshot_trade(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(decode::parse_trade_ticks(&table))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Option — List endpoints
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// List available expiration dates for an option underlying.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetOptionListExpirations`
+    pub async fn option_list_expirations(&self, symbol: &str) -> Result<Vec<String>, Error> {
+        tracing::debug!(symbol, "option_list_expirations");
+        let request = proto_v3::OptionListExpirationsRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::OptionListExpirationsRequestQuery {
+                symbol: vec![symbol.to_string()],
+            }),
+        };
+
+        let stream = self
+            .stub()
+            .get_option_list_expirations(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(decode::extract_text_column(&table, "expiration")
+            .into_iter()
+            .flatten()
+            .collect())
+    }
+
+    /// List available strike prices for an option underlying at a given expiration.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetOptionListStrikes`
+    ///
+    /// `expiration` is `YYYYMMDD`.
+    pub async fn option_list_strikes(
+        &self,
+        symbol: &str,
+        expiration: &str,
+    ) -> Result<Vec<String>, Error> {
+        tracing::debug!(symbol, expiration, "option_list_strikes");
+        let request = proto_v3::OptionListStrikesRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::OptionListStrikesRequestQuery {
+                symbol: vec![symbol.to_string()],
+                expiration: expiration.to_string(),
+            }),
+        };
+
+        let stream = self
+            .stub()
+            .get_option_list_strikes(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(decode::extract_text_column(&table, "strike")
+            .into_iter()
+            .flatten()
+            .collect())
+    }
+
+    /// List all available option underlying symbols.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetOptionListSymbols`
+    pub async fn option_list_symbols(&self) -> Result<Vec<String>, Error> {
+        tracing::debug!("option_list_symbols");
+        let request = proto_v3::OptionListSymbolsRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::OptionListSymbolsRequestQuery {}),
+        };
+
+        let stream = self
+            .stub()
+            .get_option_list_symbols(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(decode::extract_text_column(&table, "symbol")
+            .into_iter()
+            .flatten()
+            .collect())
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Option — History endpoints
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// Fetch end-of-day option data for a contract over a date range.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetOptionHistoryEod`
+    pub async fn option_history_eod(
+        &self,
+        symbol: &str,
+        expiration: &str,
+        strike: &str,
+        right: &str,
+        start: &str,
+        end: &str,
+    ) -> Result<Vec<EodTick>, Error> {
+        validate_date(start)?;
+        validate_date(end)?;
+        tracing::debug!(
+            symbol,
+            expiration,
+            strike,
+            right,
+            start,
+            end,
+            "option_history_eod"
+        );
+        let request = proto_v3::OptionHistoryEodRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::OptionHistoryEodRequestQuery {
+                contract_spec: Some(proto::ContractSpec {
+                    symbol: symbol.to_string(),
+                    expiration: expiration.to_string(),
+                    strike: Some(strike.to_string()),
+                    right: Some(right.to_string()),
+                }),
+                start_date: start.to_string(),
+                end_date: end.to_string(),
+                expiration: expiration.to_string(),
+                max_dte: None,
+                strike_range: None,
+            }),
+        };
+
+        let stream = self
+            .stub()
+            .get_option_history_eod(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(parse_eod_from_table(&table))
+    }
+
+    /// Fetch intraday OHLC bars for an option contract.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetOptionHistoryOhlc`
+    pub async fn option_history_ohlc(
+        &self,
+        symbol: &str,
+        expiration: &str,
+        strike: &str,
+        right: &str,
+        date: &str,
+        interval: &str,
+    ) -> Result<Vec<OhlcTick>, Error> {
+        validate_date(date)?;
+        tracing::debug!(
+            symbol,
+            expiration,
+            strike,
+            right,
+            date,
+            interval,
+            "option_history_ohlc"
+        );
+        let request = proto_v3::OptionHistoryOhlcRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::OptionHistoryOhlcRequestQuery {
+                contract_spec: Some(proto::ContractSpec {
+                    symbol: symbol.to_string(),
+                    expiration: expiration.to_string(),
+                    strike: Some(strike.to_string()),
+                    right: Some(right.to_string()),
+                }),
+                date: Some(date.to_string()),
+                expiration: expiration.to_string(),
+                interval: interval.to_string(),
+                start_time: None,
+                end_time: None,
+                strike_range: None,
+                start_date: None,
+                end_date: None,
+            }),
+        };
+
+        let stream = self
+            .stub()
+            .get_option_history_ohlc(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(decode::parse_ohlc_ticks(&table))
+    }
+
+    /// Fetch all trades for an option contract on a given date.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetOptionHistoryTrade`
+    pub async fn option_history_trade(
+        &self,
+        symbol: &str,
+        expiration: &str,
+        strike: &str,
+        right: &str,
+        date: &str,
+    ) -> Result<Vec<TradeTick>, Error> {
+        validate_date(date)?;
+        tracing::debug!(
+            symbol,
+            expiration,
+            strike,
+            right,
+            date,
+            "option_history_trade"
+        );
+        let request = proto_v3::OptionHistoryTradeRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::OptionHistoryTradeRequestQuery {
+                contract_spec: Some(proto::ContractSpec {
+                    symbol: symbol.to_string(),
+                    expiration: expiration.to_string(),
+                    strike: Some(strike.to_string()),
+                    right: Some(right.to_string()),
+                }),
+                date: Some(date.to_string()),
+                expiration: expiration.to_string(),
+                start_time: None,
+                end_time: None,
+                max_dte: None,
+                strike_range: None,
+                start_date: None,
+                end_date: None,
+            }),
+        };
+
+        let stream = self
+            .stub()
+            .get_option_history_trade(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(decode::parse_trade_ticks(&table))
+    }
+
+    /// Fetch NBBO quotes for an option contract on a given date.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetOptionHistoryQuote`
+    pub async fn option_history_quote(
+        &self,
+        symbol: &str,
+        expiration: &str,
+        strike: &str,
+        right: &str,
+        date: &str,
+        interval: &str,
+    ) -> Result<Vec<QuoteTick>, Error> {
+        validate_date(date)?;
+        tracing::debug!(
+            symbol,
+            expiration,
+            strike,
+            right,
+            date,
+            interval,
+            "option_history_quote"
+        );
+        let request = proto_v3::OptionHistoryQuoteRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::OptionHistoryQuoteRequestQuery {
+                contract_spec: Some(proto::ContractSpec {
+                    symbol: symbol.to_string(),
+                    expiration: expiration.to_string(),
+                    strike: Some(strike.to_string()),
+                    right: Some(right.to_string()),
+                }),
+                date: Some(date.to_string()),
+                expiration: expiration.to_string(),
+                start_time: None,
+                end_time: None,
+                interval: interval.to_string(),
+                max_dte: None,
+                strike_range: None,
+                start_date: None,
+                end_date: None,
+            }),
+        };
+
+        let stream = self
+            .stub()
+            .get_option_history_quote(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(decode::parse_quote_ticks(&table))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Index — List / History
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// List all available index symbols.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetIndexListSymbols`
+    pub async fn index_list_symbols(&self) -> Result<Vec<String>, Error> {
+        tracing::debug!("index_list_symbols");
+        let request = proto_v3::IndexListSymbolsRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::IndexListSymbolsRequestQuery {}),
+        };
+
+        let stream = self
+            .stub()
+            .get_index_list_symbols(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(decode::extract_text_column(&table, "symbol")
+            .into_iter()
+            .flatten()
+            .collect())
+    }
+
+    /// Fetch end-of-day index data for a date range.
+    ///
+    /// gRPC: `BetaThetaTerminal/GetIndexHistoryEod`
+    pub async fn index_history_eod(
+        &self,
+        symbol: &str,
+        start: &str,
+        end: &str,
+    ) -> Result<Vec<EodTick>, Error> {
+        validate_date(start)?;
+        validate_date(end)?;
+        tracing::debug!(symbol, start, end, "index_history_eod");
+        let request = proto_v3::IndexHistoryEodRequest {
+            query_info: Some(self.query_info()),
+            params: Some(proto_v3::IndexHistoryEodRequestQuery {
+                symbol: symbol.to_string(),
+                start_date: start.to_string(),
+                end_date: end.to_string(),
+            }),
+        };
+
+        let stream = self
+            .stub()
+            .get_index_history_eod(request)
+            .await?
+            .into_inner();
+        let table = self.collect_stream(stream).await?;
+
+        Ok(parse_eod_from_table(&table))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  Raw query — escape hatch for unwrapped endpoints
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// Execute a raw gRPC query and return the merged `DataTable`.
+    ///
+    /// Use this for endpoints not yet wrapped by typed methods above.
+    /// You get direct access to the gRPC stub and can construct any
+    /// request type from `proto_v3`, then feed the streaming response
+    /// back through `collect_stream` for decoding.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # async fn run(client: &thetadatadx::DirectClient) -> Result<(), thetadatadx::Error> {
+    /// use thetadatadx::proto_v3;
+    ///
+    /// let request = proto_v3::CalendarYearRequest {
+    ///     query_info: Some(client.raw_query_info()),
+    ///     params: Some(proto_v3::CalendarYearRequestQuery {
+    ///         year: "2024".to_string(),
+    ///     }),
+    /// };
+    ///
+    /// let table = client.raw_query(|mut stub| {
+    ///     Box::pin(async move {
+    ///         Ok(stub.get_calendar_year(request).await?.into_inner())
+    ///     })
+    /// }).await?;
+    ///
+    /// println!("calendar headers: {:?}", table.headers);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn raw_query<F, Fut>(&self, call: F) -> Result<proto::DataTable, Error>
+    where
+        F: FnOnce(BetaThetaTerminalClient<tonic::transport::Channel>) -> Fut,
+        Fut: std::future::Future<Output = Result<tonic::Streaming<proto::ResponseData>, Error>>,
+    {
+        let stream = call(self.stub()).await?;
+        self.collect_stream(stream).await
+    }
+
+    /// Get a `QueryInfo` for use with [`raw_query`](Self::raw_query).
+    ///
+    /// This is the same `QueryInfo` that all typed methods use internally.
+    pub fn raw_query_info(&self) -> proto_v3::QueryInfo {
+        self.query_info()
+    }
+
+    /// Get direct access to the underlying gRPC channel.
+    ///
+    /// Useful for constructing custom stubs or interceptors.
+    pub fn channel(&self) -> &tonic::transport::Channel {
+        &self.channel
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Private helpers
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Validate that a date string is in YYYYMMDD format (exactly 8 ASCII digits).
+fn validate_date(date: &str) -> Result<(), Error> {
+    if date.len() != 8 || !date.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(Error::Config(format!(
+            "invalid date '{}': expected YYYYMMDD format (8 digits)",
+            date
+        )));
+    }
+    Ok(())
+}
+
+/// Parse EOD ticks from a `DataTable` using header-based column lookup.
+///
+/// Handles both Price-typed and Number-typed columns transparently.
+fn parse_eod_from_table(table: &proto::DataTable) -> Vec<EodTick> {
+    let h: Vec<&str> = table.headers.iter().map(|s| s.as_str()).collect();
+    let find = |name: &str| h.iter().position(|&s| s == name);
+
+    fn num(row: &proto::DataValueList, idx: usize) -> i32 {
+        row.values
+            .get(idx)
+            .and_then(|dv| dv.data_type.as_ref())
+            .and_then(|dt| match dt {
+                proto::data_value::DataType::Number(n) => Some(*n as i32),
+                proto::data_value::DataType::Price(p) => Some(p.value),
+                _ => None,
+            })
+            .unwrap_or(0)
+    }
+
+    fn price_type(row: &proto::DataValueList, idx: usize) -> i32 {
+        row.values
+            .get(idx)
+            .and_then(|dv| dv.data_type.as_ref())
+            .and_then(|dt| match dt {
+                proto::data_value::DataType::Price(p) => Some(p.r#type),
+                _ => None,
+            })
+            .unwrap_or(0)
+    }
+
+    table
+        .data_table
+        .iter()
+        .map(|row| {
+            let pt = find("open").map(|i| price_type(row, i)).unwrap_or(0);
+
+            EodTick {
+                ms_of_day: find("ms_of_day").map(|i| num(row, i)).unwrap_or(0),
+                ms_of_day2: find("ms_of_day2").map(|i| num(row, i)).unwrap_or(0),
+                open: find("open").map(|i| num(row, i)).unwrap_or(0),
+                high: find("high").map(|i| num(row, i)).unwrap_or(0),
+                low: find("low").map(|i| num(row, i)).unwrap_or(0),
+                close: find("close").map(|i| num(row, i)).unwrap_or(0),
+                volume: find("volume").map(|i| num(row, i)).unwrap_or(0),
+                count: find("count").map(|i| num(row, i)).unwrap_or(0),
+                bid_size: find("bid_size").map(|i| num(row, i)).unwrap_or(0),
+                bid_exchange: find("bid_exchange").map(|i| num(row, i)).unwrap_or(0),
+                bid: find("bid").map(|i| num(row, i)).unwrap_or(0),
+                bid_condition: find("bid_condition").map(|i| num(row, i)).unwrap_or(0),
+                ask_size: find("ask_size").map(|i| num(row, i)).unwrap_or(0),
+                ask_exchange: find("ask_exchange").map(|i| num(row, i)).unwrap_or(0),
+                ask: find("ask").map(|i| num(row, i)).unwrap_or(0),
+                ask_condition: find("ask_condition").map(|i| num(row, i)).unwrap_or(0),
+                price_type: pt,
+                date: find("date").map(|i| num(row, i)).unwrap_or(0),
+            }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_date_valid() {
+        assert!(validate_date("20240101").is_ok());
+        assert!(validate_date("20231231").is_ok());
+        assert!(validate_date("00000000").is_ok());
+    }
+
+    #[test]
+    fn validate_date_invalid() {
+        // Too short
+        assert!(validate_date("2024010").is_err());
+        // Too long
+        assert!(validate_date("202401011").is_err());
+        // Contains non-digit
+        assert!(validate_date("2024-101").is_err());
+        assert!(validate_date("2024Jan1").is_err());
+        // Empty
+        assert!(validate_date("").is_err());
+        // Whitespace
+        assert!(validate_date("2024 101").is_err());
+    }
+}
