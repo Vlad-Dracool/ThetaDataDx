@@ -1960,6 +1960,25 @@ fn to_dataframe(py: Python<'_>, ticks: Vec<Py<PyAny>>) -> PyResult<Py<PyAny>> {
     dicts_to_dataframe(py, ticks)
 }
 
+/// Convert a list of tick dicts to a polars DataFrame.
+///
+/// Requires polars: `pip install thetadatadx[polars]`
+///
+/// Example:
+///
+///     ticks = client.stock_history_eod("AAPL", "20240101", "20240301")
+///     df = thetadatadx.to_polars(ticks)
+#[pyfunction]
+fn to_polars(py: Python<'_>, ticks: Vec<Py<PyAny>>) -> PyResult<Py<PyAny>> {
+    let polars = py.import("polars").map_err(|_| {
+        PyRuntimeError::new_err(
+            "polars is not installed. Install it with: pip install thetadatadx[polars]",
+        )
+    })?;
+    let df = polars.call_method1("from_dicts", (ticks,))?;
+    Ok(df.unbind())
+}
+
 // ── Module ──
 
 /// thetadatadx — Native ThetaData SDK powered by Rust.
@@ -1977,5 +1996,6 @@ fn thetadatadx_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(all_greeks, m)?)?;
     m.add_function(wrap_pyfunction!(implied_volatility, m)?)?;
     m.add_function(wrap_pyfunction!(to_dataframe, m)?)?;
+    m.add_function(wrap_pyfunction!(to_polars, m)?)?;
     Ok(())
 }

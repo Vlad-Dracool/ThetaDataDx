@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "thetadatadx"
-version = "1.2.1"
+version = "1.2.2"
 description = "No-JVM ThetaData Terminal — native Rust SDK for direct market data access (Python bindings)"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -28,6 +28,8 @@ Discord = "https://discord.thetadata.us/"
 
 [project.optional-dependencies]
 pandas = ["pandas>=1.5"]
+polars = ["polars>=0.20"]
+all = ["pandas>=1.5", "polars>=0.20"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
