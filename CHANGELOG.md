@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-03-26
+
+### Added
+
+- **Polars support** in Python SDK: `pip install thetadatadx[polars]`
+- `to_polars(ticks)` function converts tick dicts directly to polars DataFrame via `polars.from_dicts()`
+- Optional dependency groups: `[pandas]`, `[polars]`, `[all]` for both
+
+### Fixed
+
+- **Multi-platform Python wheels** — now builds for Linux, macOS, and Windows (was Linux-only)
+- Source distribution (sdist) included for pip build-from-source fallback
+- Auth response parsing: subscription fields are integers (0-3), not strings — fixes connection failures
+
+## [1.2.1] - 2026-03-26
+
+### Fixed
+
+- **Auth: subscription fields are integers** — Nexus API returns `"stockSubscription": 0` (int), not strings. Fixes `"failed to parse Nexus API response"` error on connect.
+- **Multi-platform Python wheels** — CI now builds for Linux + macOS + Windows (was Linux x86_64 only). Fixes `"no matching distribution found"` for macOS/Windows users.
+- **Source distribution** — sdist included so `pip install` can build from source when no pre-built wheel matches.
+- Removed hallucinated "row deduplication" from docs (was never implemented, would have dropped real trades).
+
 ## [1.2.0] - 2026-03-26
 
 ### Added (PR #13)
@@ -239,6 +262,8 @@ See [TODO.md](TODO.md) for the production readiness checklist and performance ro
 - Price type range enforced with `assert!` in release builds
 
 [Unreleased]: https://github.com/userFRM/ThetaDataDx/compare/v1.2.0...HEAD
+[1.2.2]: https://github.com/userFRM/ThetaDataDx/compare/v1.2.1...v1.2.2
+[1.2.1]: https://github.com/userFRM/ThetaDataDx/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/userFRM/ThetaDataDx/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/userFRM/ThetaDataDx/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/userFRM/ThetaDataDx/compare/v1.0.1...v1.1.0
