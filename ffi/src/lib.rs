@@ -1472,6 +1472,264 @@ pub unsafe extern "C" fn tdx_fpss_unsubscribe_quotes(
     }
 }
 
+/// Unsubscribe from trade data for a stock symbol.
+///
+/// Returns the request ID on success, or -1 on error (check `tdx_last_error()`).
+#[no_mangle]
+pub unsafe extern "C" fn tdx_fpss_unsubscribe_trades(
+    handle: *const TdxFpssHandle,
+    symbol: *const c_char,
+) -> i32 {
+    if handle.is_null() {
+        set_error("FPSS handle is null");
+        return -1;
+    }
+    let symbol = match unsafe { cstr_to_str(symbol) } {
+        Some(s) => s,
+        None => {
+            set_error("symbol is null or invalid UTF-8");
+            return -1;
+        }
+    };
+    let handle = unsafe { &*handle };
+    let guard = handle.inner.lock().unwrap();
+    let client = match guard.as_ref() {
+        Some(c) => c,
+        None => {
+            set_error("FPSS client is shut down");
+            return -1;
+        }
+    };
+    let contract = thetadatadx::fpss::protocol::Contract::stock(symbol);
+    match client.unsubscribe_trades(&contract) {
+        Ok(req_id) => req_id,
+        Err(e) => {
+            set_error(&e.to_string());
+            -1
+        }
+    }
+}
+
+/// Subscribe to open interest data for a stock symbol.
+///
+/// Returns the request ID on success, or -1 on error (check `tdx_last_error()`).
+#[no_mangle]
+pub unsafe extern "C" fn tdx_fpss_subscribe_open_interest(
+    handle: *const TdxFpssHandle,
+    symbol: *const c_char,
+) -> i32 {
+    if handle.is_null() {
+        set_error("FPSS handle is null");
+        return -1;
+    }
+    let symbol = match unsafe { cstr_to_str(symbol) } {
+        Some(s) => s,
+        None => {
+            set_error("symbol is null or invalid UTF-8");
+            return -1;
+        }
+    };
+    let handle = unsafe { &*handle };
+    let guard = handle.inner.lock().unwrap();
+    let client = match guard.as_ref() {
+        Some(c) => c,
+        None => {
+            set_error("FPSS client is shut down");
+            return -1;
+        }
+    };
+    let contract = thetadatadx::fpss::protocol::Contract::stock(symbol);
+    match client.subscribe_open_interest(&contract) {
+        Ok(req_id) => req_id,
+        Err(e) => {
+            set_error(&e.to_string());
+            -1
+        }
+    }
+}
+
+/// Unsubscribe from open interest data for a stock symbol.
+///
+/// Returns the request ID on success, or -1 on error (check `tdx_last_error()`).
+#[no_mangle]
+pub unsafe extern "C" fn tdx_fpss_unsubscribe_open_interest(
+    handle: *const TdxFpssHandle,
+    symbol: *const c_char,
+) -> i32 {
+    if handle.is_null() {
+        set_error("FPSS handle is null");
+        return -1;
+    }
+    let symbol = match unsafe { cstr_to_str(symbol) } {
+        Some(s) => s,
+        None => {
+            set_error("symbol is null or invalid UTF-8");
+            return -1;
+        }
+    };
+    let handle = unsafe { &*handle };
+    let guard = handle.inner.lock().unwrap();
+    let client = match guard.as_ref() {
+        Some(c) => c,
+        None => {
+            set_error("FPSS client is shut down");
+            return -1;
+        }
+    };
+    let contract = thetadatadx::fpss::protocol::Contract::stock(symbol);
+    match client.unsubscribe_open_interest(&contract) {
+        Ok(req_id) => req_id,
+        Err(e) => {
+            set_error(&e.to_string());
+            -1
+        }
+    }
+}
+
+/// Subscribe to all trades for a security type (full trade stream).
+///
+/// `sec_type` must be one of: "STOCK", "OPTION", "INDEX".
+///
+/// Returns the request ID on success, or -1 on error (check `tdx_last_error()`).
+#[no_mangle]
+pub unsafe extern "C" fn tdx_fpss_subscribe_full_trades(
+    handle: *const TdxFpssHandle,
+    sec_type: *const c_char,
+) -> i32 {
+    if handle.is_null() {
+        set_error("FPSS handle is null");
+        return -1;
+    }
+    let sec_type_str = match unsafe { cstr_to_str(sec_type) } {
+        Some(s) => s,
+        None => {
+            set_error("sec_type is null or invalid UTF-8");
+            return -1;
+        }
+    };
+    let st = match sec_type_str.to_uppercase().as_str() {
+        "STOCK" => thetadatadx::types::enums::SecType::Stock,
+        "OPTION" => thetadatadx::types::enums::SecType::Option,
+        "INDEX" => thetadatadx::types::enums::SecType::Index,
+        other => {
+            set_error(&format!(
+                "unknown sec_type: {other:?} (expected STOCK, OPTION, or INDEX)"
+            ));
+            return -1;
+        }
+    };
+    let handle = unsafe { &*handle };
+    let guard = handle.inner.lock().unwrap();
+    let client = match guard.as_ref() {
+        Some(c) => c,
+        None => {
+            set_error("FPSS client is shut down");
+            return -1;
+        }
+    };
+    match client.subscribe_full_trades(st) {
+        Ok(req_id) => req_id,
+        Err(e) => {
+            set_error(&e.to_string());
+            -1
+        }
+    }
+}
+
+/// Check if the FPSS client is currently authenticated.
+///
+/// Returns 1 if authenticated, 0 if not (or if handle is null).
+#[no_mangle]
+pub unsafe extern "C" fn tdx_fpss_is_authenticated(handle: *const TdxFpssHandle) -> i32 {
+    if handle.is_null() {
+        return 0;
+    }
+    let handle = unsafe { &*handle };
+    let guard = handle.inner.lock().unwrap();
+    match guard.as_ref() {
+        Some(c) => {
+            if c.is_authenticated() {
+                1
+            } else {
+                0
+            }
+        }
+        None => 0,
+    }
+}
+
+/// Look up a single contract by its server-assigned ID.
+///
+/// Returns a JSON string representation of the contract, or NULL if not found.
+/// Caller must free the returned string with `tdx_string_free`.
+#[no_mangle]
+pub unsafe extern "C" fn tdx_fpss_contract_lookup(
+    handle: *const TdxFpssHandle,
+    id: i32,
+) -> *mut c_char {
+    if handle.is_null() {
+        set_error("FPSS handle is null");
+        return ptr::null_mut();
+    }
+    let handle = unsafe { &*handle };
+    let guard = handle.inner.lock().unwrap();
+    let client = match guard.as_ref() {
+        Some(c) => c,
+        None => {
+            set_error("FPSS client is shut down");
+            return ptr::null_mut();
+        }
+    };
+    match client.contract_lookup(id) {
+        Some(contract) => {
+            let s = format!("{contract}");
+            match CString::new(s) {
+                Ok(cs) => cs.into_raw(),
+                Err(_) => ptr::null_mut(),
+            }
+        }
+        None => ptr::null_mut(),
+    }
+}
+
+/// Get a snapshot of currently active subscriptions.
+///
+/// Returns a JSON array of objects with "kind" and "contract" keys.
+/// Caller must free the returned string with `tdx_string_free`.
+#[no_mangle]
+pub unsafe extern "C" fn tdx_fpss_active_subscriptions(
+    handle: *const TdxFpssHandle,
+) -> *mut c_char {
+    if handle.is_null() {
+        set_error("FPSS handle is null");
+        return ptr::null_mut();
+    }
+    let handle = unsafe { &*handle };
+    let guard = handle.inner.lock().unwrap();
+    let client = match guard.as_ref() {
+        Some(c) => c,
+        None => {
+            set_error("FPSS client is shut down");
+            return ptr::null_mut();
+        }
+    };
+    let subs = client.active_subscriptions();
+    let json_array: Vec<serde_json::Value> = subs
+        .into_iter()
+        .map(|(kind, contract)| {
+            serde_json::json!({
+                "kind": format!("{kind:?}"),
+                "contract": format!("{contract}"),
+            })
+        })
+        .collect();
+    let json_str = serde_json::to_string(&json_array).unwrap_or_else(|_| "[]".to_string());
+    match CString::new(json_str) {
+        Ok(cs) => cs.into_raw(),
+        Err(_) => ptr::null_mut(),
+    }
+}
+
 /// Poll for the next FPSS event.
 ///
 /// Blocks for up to `timeout_ms` milliseconds. Returns a JSON string with keys

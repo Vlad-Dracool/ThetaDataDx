@@ -819,6 +819,50 @@ int FpssClient::subscribe_trades(const std::string& symbol) {
     return rc;
 }
 
+int FpssClient::subscribe_open_interest(const std::string& symbol) {
+    int rc = tdx_fpss_subscribe_open_interest(handle_.get(), symbol.c_str());
+    if (rc < 0) throw std::runtime_error("thetadatadx: " + detail::last_ffi_error());
+    return rc;
+}
+
+int FpssClient::subscribe_full_trades(const std::string& sec_type) {
+    int rc = tdx_fpss_subscribe_full_trades(handle_.get(), sec_type.c_str());
+    if (rc < 0) throw std::runtime_error("thetadatadx: " + detail::last_ffi_error());
+    return rc;
+}
+
+int FpssClient::unsubscribe_open_interest(const std::string& symbol) {
+    int rc = tdx_fpss_unsubscribe_open_interest(handle_.get(), symbol.c_str());
+    if (rc < 0) throw std::runtime_error("thetadatadx: " + detail::last_ffi_error());
+    return rc;
+}
+
+int FpssClient::unsubscribe_trades(const std::string& symbol) {
+    int rc = tdx_fpss_unsubscribe_trades(handle_.get(), symbol.c_str());
+    if (rc < 0) throw std::runtime_error("thetadatadx: " + detail::last_ffi_error());
+    return rc;
+}
+
+bool FpssClient::is_authenticated() const {
+    return tdx_fpss_is_authenticated(handle_.get()) != 0;
+}
+
+std::optional<std::string> FpssClient::contract_lookup(int id) const {
+    char* ptr = tdx_fpss_contract_lookup(handle_.get(), id);
+    if (!ptr) return std::nullopt;
+    std::string result(ptr);
+    tdx_string_free(ptr);
+    return result;
+}
+
+std::string FpssClient::active_subscriptions() const {
+    char* ptr = tdx_fpss_active_subscriptions(handle_.get());
+    if (!ptr) return "[]";
+    std::string result(ptr);
+    tdx_string_free(ptr);
+    return result;
+}
+
 std::string FpssClient::next_event(uint64_t timeout_ms) {
     detail::FfiString result(tdx_fpss_next_event(handle_.get(), timeout_ms));
     if (!result.ok()) return "";  // Timeout — not an error.

@@ -24,7 +24,7 @@ No-JVM ThetaData Terminal — native Rust SDK for direct market data access.
 - **Zero-copy tick types** — `TradeTick`, `QuoteTick`, `OhlcTick`, `EodTick` with fixed-point `Price` encoding
 - **Async/await** throughout — built on Tokio with concurrent gRPC streaming and background heartbeat tasks
 - **Direct authentication** — handles the Nexus API auth flow, session management, and reconnection logic
-- **FIT codec** — native decoder for ThetaData's nibble-encoded delta-compressed tick format, with SIMD acceleration (SSE2) on x86_64
+- **FIT codec** — native decoder for ThetaData's nibble-encoded delta-compressed tick format
 - **Multi-language SDKs** — Python (PyO3), Go (CGo), C++ (RAII), all powered by the Rust core, all with FPSS streaming support
 - **pandas DataFrame support** — `to_dataframe()` and `_df` convenience methods in the Python SDK
 
@@ -34,7 +34,7 @@ No-JVM ThetaData Terminal — native Rust SDK for direct market data access.
 
 ```toml
 [dependencies]
-thetadatadx = "1.2"
+thetadatadx = "2.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 

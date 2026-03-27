@@ -1,4 +1,4 @@
 [workspace]
-members = ["crates/thetadatadx", "ffi"]
-exclude = ["sdks/python"]
+members = ["crates/thetadatadx", "tools/cli", "ffi"]
+exclude = ["sdks/python", "tools/mcp", "tools/server"]
 resolver = "2"

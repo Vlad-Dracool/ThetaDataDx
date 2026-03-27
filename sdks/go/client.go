@@ -113,7 +113,14 @@ extern void tdx_string_free(char* s);
 extern TdxFpssHandle* tdx_fpss_connect(const TdxCredentials* creds, const TdxConfig* config);
 extern int tdx_fpss_subscribe_quotes(const TdxFpssHandle* h, const char* symbol);
 extern int tdx_fpss_subscribe_trades(const TdxFpssHandle* h, const char* symbol);
+extern int tdx_fpss_subscribe_open_interest(const TdxFpssHandle* h, const char* symbol);
+extern int tdx_fpss_subscribe_full_trades(const TdxFpssHandle* h, const char* sec_type);
 extern int tdx_fpss_unsubscribe_quotes(const TdxFpssHandle* h, const char* symbol);
+extern int tdx_fpss_unsubscribe_trades(const TdxFpssHandle* h, const char* symbol);
+extern int tdx_fpss_unsubscribe_open_interest(const TdxFpssHandle* h, const char* symbol);
+extern int tdx_fpss_is_authenticated(const TdxFpssHandle* h);
+extern char* tdx_fpss_contract_lookup(const TdxFpssHandle* h, int id);
+extern char* tdx_fpss_active_subscriptions(const TdxFpssHandle* h);
 extern char* tdx_fpss_next_event(const TdxFpssHandle* h, uint64_t timeout_ms);
 extern void tdx_fpss_shutdown(const TdxFpssHandle* h);
 extern void tdx_fpss_free(TdxFpssHandle* h);
@@ -822,6 +829,101 @@ func (f *FpssClient) SubscribeTrades(symbol string) (int, error) {
 		return 0, fmt.Errorf("thetadatadx: %s", lastError())
 	}
 	return int(rc), nil
+}
+
+// SubscribeOpenInterest subscribes to open interest data for a stock symbol.
+//
+// Returns the request ID for this subscription.
+func (f *FpssClient) SubscribeOpenInterest(symbol string) (int, error) {
+	cSym := C.CString(symbol)
+	defer C.free(unsafe.Pointer(cSym))
+	rc := C.tdx_fpss_subscribe_open_interest(f.handle, cSym)
+	if rc < 0 {
+		return 0, fmt.Errorf("thetadatadx: %s", lastError())
+	}
+	return int(rc), nil
+}
+
+// SubscribeFullTrades subscribes to all trades for a security type.
+//
+// secType must be one of: "STOCK", "OPTION", "INDEX".
+// Returns the request ID for this subscription.
+func (f *FpssClient) SubscribeFullTrades(secType string) (int, error) {
+	cType := C.CString(secType)
+	defer C.free(unsafe.Pointer(cType))
+	rc := C.tdx_fpss_subscribe_full_trades(f.handle, cType)
+	if rc < 0 {
+		return 0, fmt.Errorf("thetadatadx: %s", lastError())
+	}
+	return int(rc), nil
+}
+
+// UnsubscribeQuotes unsubscribes from quote data for a stock symbol.
+//
+// Returns the request ID.
+func (f *FpssClient) UnsubscribeQuotes(symbol string) (int, error) {
+	cSym := C.CString(symbol)
+	defer C.free(unsafe.Pointer(cSym))
+	rc := C.tdx_fpss_unsubscribe_quotes(f.handle, cSym)
+	if rc < 0 {
+		return 0, fmt.Errorf("thetadatadx: %s", lastError())
+	}
+	return int(rc), nil
+}
+
+// UnsubscribeTrades unsubscribes from trade data for a stock symbol.
+//
+// Returns the request ID.
+func (f *FpssClient) UnsubscribeTrades(symbol string) (int, error) {
+	cSym := C.CString(symbol)
+	defer C.free(unsafe.Pointer(cSym))
+	rc := C.tdx_fpss_unsubscribe_trades(f.handle, cSym)
+	if rc < 0 {
+		return 0, fmt.Errorf("thetadatadx: %s", lastError())
+	}
+	return int(rc), nil
+}
+
+// UnsubscribeOpenInterest unsubscribes from open interest data for a stock symbol.
+//
+// Returns the request ID.
+func (f *FpssClient) UnsubscribeOpenInterest(symbol string) (int, error) {
+	cSym := C.CString(symbol)
+	defer C.free(unsafe.Pointer(cSym))
+	rc := C.tdx_fpss_unsubscribe_open_interest(f.handle, cSym)
+	if rc < 0 {
+		return 0, fmt.Errorf("thetadatadx: %s", lastError())
+	}
+	return int(rc), nil
+}
+
+// IsAuthenticated returns true if the FPSS client is currently authenticated.
+func (f *FpssClient) IsAuthenticated() bool {
+	return C.tdx_fpss_is_authenticated(f.handle) != 0
+}
+
+// ContractLookup looks up a single contract by its server-assigned ID.
+//
+// Returns the contract string, or an error if not found.
+func (f *FpssClient) ContractLookup(id int) (string, error) {
+	cstr := C.tdx_fpss_contract_lookup(f.handle, C.int(id))
+	if cstr == nil {
+		return "", fmt.Errorf("thetadatadx: contract %d not found", id)
+	}
+	goStr := C.GoString(cstr)
+	C.tdx_string_free(cstr)
+	return goStr, nil
+}
+
+// ActiveSubscriptions returns a JSON array of currently active subscriptions.
+func (f *FpssClient) ActiveSubscriptions() (json.RawMessage, error) {
+	cstr := C.tdx_fpss_active_subscriptions(f.handle)
+	if cstr == nil {
+		return nil, fmt.Errorf("thetadatadx: %s", lastError())
+	}
+	goStr := C.GoString(cstr)
+	C.tdx_string_free(cstr)
+	return json.RawMessage(goStr), nil
 }
 
 // NextEvent polls for the next FPSS event with a timeout.

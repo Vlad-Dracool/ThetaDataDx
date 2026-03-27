@@ -1,6 +1,6 @@
 [package]
 name = "thetadatadx"
-version = "1.2.4"
+version = "2.0.0"
 edition = "2021"
 rust-version = "1.85"
 authors = ["userFRM"]
@@ -20,7 +20,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = []
-async-zstd = ["dep:async-compression"]
 
 [dependencies]
 # gRPC + protobuf (tonic 0.14 extracted prost codec into tonic-prost)
@@ -45,7 +44,6 @@ uuid = "1.22.0"
 
 # Compression (responses use zstd)
 zstd = "0.13.3"
-async-compression = { version = "0.4.41", features = ["tokio", "zstd"], optional = true }
 
 # Error handling
 thiserror = "2.0.18"
@@ -63,6 +61,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 # tonic 0.14 extracted build integration into tonic-prost-build
 tonic-prost-build = "=0.14.5"
 prost-build = "=0.14.3"
+regex = "1"
 
 [[bench]]
 name = "bench_fit"

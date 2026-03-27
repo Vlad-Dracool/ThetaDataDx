@@ -101,7 +101,9 @@ use crate::codec::fit::{apply_deltas, FitReader};
 use crate::error::Error;
 use crate::types::enums::{RemoveReason, StreamMsgType, StreamResponseType};
 
-use self::framing::{read_frame, write_frame, write_raw_frame, write_raw_frame_no_flush, Frame};
+use self::framing::{
+    read_frame, read_frame_into, write_frame, write_raw_frame, write_raw_frame_no_flush, Frame,
+};
 use self::protocol::{
     build_credentials_payload, build_ping_payload, build_subscribe_payload, parse_contract_message,
     parse_disconnect_reason, parse_req_response, Contract, SubscriptionKind, PING_INTERVAL_MS,
@@ -291,12 +293,27 @@ impl FpssClient {
     /// 5. Start I/O thread (blocking TLS read -> Disruptor ring -> callback)
     ///
     /// Source: `FPSSClient.connect()` and `FPSSClient.sendCredentials()`.
+    /// Connect with default settings (OHLCVC derivation enabled).
     pub fn connect<F>(creds: &Credentials, ring_size: usize, handler: F) -> Result<Self, Error>
     where
         F: FnMut(&FpssEvent) + Send + 'static,
     {
         let (stream, server_addr) = connection::connect()?;
-        Self::connect_with_stream(creds, stream, server_addr, ring_size, handler)
+        Self::connect_with_stream(creds, stream, server_addr, ring_size, true, handler)
+    }
+
+    /// Connect with OHLCVC derivation disabled.
+    ///
+    /// When `derive_ohlcvc` is false, the client will NOT emit derived
+    /// `FpssData::Ohlcvc` events after each trade. You still receive
+    /// server-sent OHLCVC frames. This reduces throughput overhead by
+    /// eliminating one extra event per trade.
+    pub fn connect_no_ohlcvc<F>(creds: &Credentials, ring_size: usize, handler: F) -> Result<Self, Error>
+    where
+        F: FnMut(&FpssEvent) + Send + 'static,
+    {
+        let (stream, server_addr) = connection::connect()?;
+        Self::connect_with_stream(creds, stream, server_addr, ring_size, false, handler)
     }
 
     /// Connect using a pre-established stream (for testing with mock sockets).
@@ -305,6 +322,7 @@ impl FpssClient {
         mut stream: connection::FpssStream,
         server_addr: String,
         ring_size: usize,
+        derive_ohlcvc: bool,
         handler: F,
     ) -> Result<Self, Error>
     where
@@ -378,9 +396,10 @@ impl FpssClient {
                     io_contract_map,
                     permissions,
                     io_server_addr,
+                    derive_ohlcvc,
                 );
             })
-            .expect("failed to spawn fpss-io thread");
+            .map_err(|e| Error::Fpss(format!("failed to spawn fpss-io thread: {e}")))?;
 
         // Spawn the ping thread: sends PING command every 100ms.
         let ping_shutdown = Arc::clone(&shutdown);
@@ -391,7 +410,7 @@ impl FpssClient {
             .spawn(move || {
                 ping_loop(ping_cmd_tx, ping_shutdown, ping_authenticated);
             })
-            .expect("failed to spawn fpss-ping thread");
+            .map_err(|e| Error::Fpss(format!("failed to spawn fpss-ping thread: {e}")))?;
 
         Ok(FpssClient {
             cmd_tx,
@@ -433,6 +452,23 @@ impl FpssClient {
     }
 
     /// Subscribe to all trades for a security type (full trade stream).
+    ///
+    /// # Behavior (from ThetaData server)
+    ///
+    /// The server sends a **bundle** per trade event (not just trades):
+    /// 1. Pre-trade NBBO quote (last quote before the trade)
+    /// 2. OHLC bar for the traded contract
+    /// 3. The trade itself
+    /// 4. Post-trade NBBO quote 1
+    /// 5. Post-trade NBBO quote 2
+    ///
+    /// Your callback will receive [`FpssData::Quote`], [`FpssData::Trade`], and
+    /// [`FpssData::Ohlcvc`] events interleaved. This is normal behavior from
+    /// the ThetaData FPSS server.
+    ///
+    /// If OHLCVC derivation is enabled (default via [`connect`]), you will also
+    /// receive locally-derived [`FpssData::Ohlcvc`] after each trade. Use
+    /// [`connect_no_ohlcvc`] to disable this and reduce throughput overhead.
     ///
     /// # Wire protocol (from `PacketStream.java`)
     ///
@@ -493,7 +529,7 @@ impl FpssClient {
 
         // Track for reconnection
         {
-            let mut subs = self.active_subs.lock().unwrap();
+            let mut subs = self.active_subs.lock().unwrap_or_else(|e| e.into_inner());
             subs.push((kind, contract.clone()));
         }
 
@@ -520,7 +556,7 @@ impl FpssClient {
 
         // Remove from tracked subscriptions
         {
-            let mut subs = self.active_subs.lock().unwrap();
+            let mut subs = self.active_subs.lock().unwrap_or_else(|e| e.into_inner());
             subs.retain(|(k, c)| !(k == &kind && c == contract));
         }
 
@@ -564,7 +600,10 @@ impl FpssClient {
     ///
     /// Useful for decoding data messages that reference contracts by ID.
     pub fn contract_map(&self) -> HashMap<i32, Contract> {
-        self.contract_map.lock().unwrap().clone()
+        self.contract_map
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Look up a single contract by its server-assigned ID.
@@ -572,12 +611,19 @@ impl FpssClient {
     /// Much cheaper than [`contract_map()`](Self::contract_map) for the hot path
     /// where callers decode FIT ticks and need to resolve individual contract IDs.
     pub fn contract_lookup(&self, id: i32) -> Option<Contract> {
-        self.contract_map.lock().unwrap().get(&id).cloned()
+        self.contract_map
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&id)
+            .cloned()
     }
 
     /// Get a snapshot of currently active subscriptions.
     pub fn active_subscriptions(&self) -> Vec<(SubscriptionKind, Contract)> {
-        self.active_subs.lock().unwrap().clone()
+        self.active_subs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Verify connection is live before sending.
@@ -670,6 +716,7 @@ fn io_loop<F>(
     contract_map: Arc<Mutex<HashMap<i32, Contract>>>,
     permissions: String,
     _server_addr: String,
+    derive_ohlcvc: bool,
 ) where
     F: FnMut(&FpssEvent) + Send + 'static,
 {
@@ -695,9 +742,10 @@ fn io_loop<F>(
         }));
     });
 
-    // Split the stream into buffered read/write.
-    // We use BufReader for efficient small reads (FPSS frames are tiny: 2-257 bytes).
-    // BufWriter batches small writes (pings, subscribe frames).
+    // Split the stream into buffered read + buffered write.
+    // BufReader: efficient small reads (FPSS frames are tiny: 2-257 bytes).
+    // BufWriter: batches small writes (pings, subscribe frames). Only flushed
+    // on PING frames, matching the Java terminal's behavior.
     let mut reader = BufReader::new(stream);
 
     // Track consecutive read timeouts to detect the 10s overall timeout.
@@ -711,25 +759,36 @@ fn io_loop<F>(
     //   Quote=11, Trade=16, OpenInterest=3, Ohlcvc=9
     let mut delta_state: DeltaState = DeltaState::new();
 
+    // Reusable frame payload buffer — avoids per-frame heap allocation.
+    // Capacity grows to the largest frame seen and stays there.
+    let mut frame_buf: Vec<u8> = Vec::with_capacity(framing::MAX_PAYLOAD_LEN);
+
     loop {
         if shutdown.load(Ordering::Relaxed) {
             break;
         }
 
         // --- Phase 1: Try to read a frame (short blocking read) ---
-        match read_frame(&mut reader) {
-            Ok(Some(frame)) => {
+        match read_frame_into(&mut reader, &mut frame_buf) {
+            Ok(Some((code, payload_len))) => {
                 consecutive_timeouts = 0;
 
-                let events = decode_frame(
-                    &frame,
+                let (primary, secondary) = decode_frame(
+                    code,
+                    &frame_buf[..payload_len],
                     &authenticated,
                     &contract_map,
                     &shutdown,
                     &mut delta_state,
+                    derive_ohlcvc,
                 );
 
-                for evt in events {
+                if let Some(evt) = primary {
+                    producer.publish(|slot| {
+                        slot.event = Some(evt);
+                    });
+                }
+                if let Some(evt) = secondary {
                     producer.publish(|slot| {
                         slot.event = Some(evt);
                     });
@@ -780,6 +839,10 @@ fn io_loop<F>(
 
         // --- Phase 2: Drain command channel (non-blocking) ---
         // Process all pending write commands.
+        // Writes go through the underlying stream (via BufReader::get_mut).
+        // We rely on write_raw_frame / write_raw_frame_no_flush for
+        // flush discipline: only PING frames trigger a flush, batching
+        // other writes for better throughput.
         loop {
             match cmd_rx.try_recv() {
                 Ok(IoCommand::WriteFrame { code, payload }) => {
@@ -975,13 +1038,22 @@ struct DeltaState {
     prev: HashMap<(u8, i32), Vec<i32>>,
     /// Per-contract OHLCVC accumulators.
     ohlcvc: HashMap<i32, OhlcvcAccumulator>,
+    /// Reusable scratch buffer for FIT decoding, avoiding per-tick allocation.
+    /// Resized (never shrunk) to fit the largest tick type seen.
+    alloc_buf: Vec<i32>,
+    /// Set after `decode_tick` to indicate the last row was a DATE marker.
+    /// Callers use this to distinguish normal DATE skips from corrupt payloads.
+    last_was_date: bool,
 }
 
 impl DeltaState {
     fn new() -> Self {
+        // Pre-allocate for the largest tick type (Trade = 16 fields + 1 contract_id).
         Self {
             prev: HashMap::new(),
             ohlcvc: HashMap::new(),
+            alloc_buf: vec![0i32; TRADE_FIELDS + 1],
+            last_was_date: false,
         }
     }
 
@@ -993,6 +1065,7 @@ impl DeltaState {
     fn clear(&mut self) {
         self.prev.clear();
         self.ohlcvc.clear();
+        self.last_was_date = false;
     }
 
     /// Decode FIT payload and apply delta decompression.
@@ -1008,26 +1081,34 @@ impl DeltaState {
     /// ```
     ///
     /// Returns `(contract_id, tick_fields)` or `None` if payload is too short
-    /// or the FIT row is a DATE marker.
+    /// or the FIT row is a DATE marker. Sets `self.last_was_date` so callers
+    /// can distinguish DATE markers from corrupt payloads.
     fn decode_tick(
         &mut self,
         msg_code: u8,
         payload: &[u8],
         expected_fields: usize,
     ) -> Option<(i32, Vec<i32>)> {
+        self.last_was_date = false;
+
         if payload.is_empty() {
             return None;
         }
 
-        // Allocate for contract_id (1 field) + tick data fields.
+        // Reuse the scratch buffer: resize if needed (retains capacity),
+        // then zero-fill the portion we need.
         let total_fields = expected_fields + 1;
-        let mut alloc = vec![0i32; total_fields];
+        if self.alloc_buf.len() < total_fields {
+            self.alloc_buf.resize(total_fields, 0);
+        }
+        self.alloc_buf[..total_fields].fill(0);
 
         let mut reader = FitReader::new(payload);
-        let n = reader.read_changes(&mut alloc);
+        let n = reader.read_changes(&mut self.alloc_buf[..total_fields]);
 
         if reader.is_date {
             // DATE marker row -- skip (no user-visible data).
+            self.last_was_date = true;
             return None;
         }
 
@@ -1036,10 +1117,11 @@ impl DeltaState {
         }
 
         // First FIT field is the contract_id.
-        let contract_id = alloc[0];
+        let contract_id = self.alloc_buf[0];
 
         // Tick data is alloc[1..]. Extract into its own vec.
-        let mut fields: Vec<i32> = alloc[1..total_fields].to_vec();
+        // This clone is unavoidable: we need to store a copy in the delta HashMap.
+        let mut fields: Vec<i32> = self.alloc_buf[1..total_fields].to_vec();
 
         // Delta decompression applies only to the tick portion (excluding
         // contract_id), matching Java's `Tick.readID()`:
@@ -1064,73 +1146,100 @@ impl DeltaState {
     }
 }
 
-/// Decode a frame into an FpssEvent (if it maps to one).
+/// Decode a frame into zero, one, or two `FpssEvent`s.
+///
+/// Returns `(primary, secondary)` where `secondary` is only `Some` for Trade
+/// frames that also produce a derived OHLCVC event. This eliminates the
+/// per-frame `Vec<FpssEvent>` allocation that was on the hot path.
 ///
 /// This is the frame dispatch logic from `FPSSClient.java`'s reader thread.
 /// Tick data frames (Quote, Trade, OpenInterest, Ohlcvc) are FIT-decoded and
 /// delta-decompressed before being emitted as typed events.
 fn decode_frame(
-    frame: &Frame,
+    code: StreamMsgType,
+    payload: &[u8],
     authenticated: &AtomicBool,
     contract_map: &Mutex<HashMap<i32, Contract>>,
     shutdown: &AtomicBool,
     delta_state: &mut DeltaState,
-) -> Vec<FpssEvent> {
-    match frame.code {
+    derive_ohlcvc: bool,
+) -> (Option<FpssEvent>, Option<FpssEvent>) {
+    match code {
         StreamMsgType::Metadata => {
             // Can arrive again after reconnection
-            let permissions = String::from_utf8_lossy(&frame.payload).to_string();
+            let permissions = String::from_utf8_lossy(payload).to_string();
             tracing::debug!(permissions = %permissions, "received METADATA");
             authenticated.store(true, Ordering::Release);
-            vec![FpssEvent::Control(FpssControl::LoginSuccess {
-                permissions,
-            })]
+            (
+                Some(FpssEvent::Control(FpssControl::LoginSuccess {
+                    permissions,
+                })),
+                None,
+            )
         }
 
-        StreamMsgType::Contract => match parse_contract_message(&frame.payload) {
+        StreamMsgType::Contract => match parse_contract_message(payload) {
             Ok((id, contract)) => {
                 tracing::debug!(id, contract = %contract, "contract assigned");
-                contract_map.lock().unwrap().insert(id, contract.clone());
-                vec![FpssEvent::Control(FpssControl::ContractAssigned {
-                    id,
-                    contract,
-                })]
+                contract_map
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(id, contract.clone());
+                (
+                    Some(FpssEvent::Control(FpssControl::ContractAssigned {
+                        id,
+                        contract,
+                    })),
+                    None,
+                )
             }
             Err(e) => {
                 tracing::warn!(error = %e, "failed to parse CONTRACT message");
-                vec![FpssEvent::Control(FpssControl::Error {
-                    message: format!("failed to parse CONTRACT message: {e}"),
-                })]
+                (
+                    Some(FpssEvent::Control(FpssControl::Error {
+                        message: format!("failed to parse CONTRACT message: {e}"),
+                    })),
+                    None,
+                )
             }
         },
 
         StreamMsgType::Quote => {
-            let code = frame.code as u8;
-            match delta_state.decode_tick(code, &frame.payload, QUOTE_FIELDS) {
-                Some((contract_id, f)) => vec![FpssEvent::Data(FpssData::Quote {
-                    contract_id,
-                    ms_of_day: f[0],
-                    bid_size: f[1],
-                    bid_exchange: f[2],
-                    bid: f[3],
-                    bid_condition: f[4],
-                    ask_size: f[5],
-                    ask_exchange: f[6],
-                    ask: f[7],
-                    ask_condition: f[8],
-                    price_type: f[9],
-                    date: f[10],
-                })],
-                None => vec![FpssEvent::RawData {
-                    code: frame.code as u8,
-                    payload: frame.payload.clone(),
-                }],
+            let msg_code = code as u8;
+            match delta_state.decode_tick(msg_code, payload, QUOTE_FIELDS) {
+                Some((contract_id, f)) => (
+                    Some(FpssEvent::Data(FpssData::Quote {
+                        contract_id,
+                        ms_of_day: f[0],
+                        bid_size: f[1],
+                        bid_exchange: f[2],
+                        bid: f[3],
+                        bid_condition: f[4],
+                        ask_size: f[5],
+                        ask_exchange: f[6],
+                        ask: f[7],
+                        ask_condition: f[8],
+                        price_type: f[9],
+                        date: f[10],
+                    })),
+                    None,
+                ),
+                // DATE markers return None from decode_tick -- this is normal
+                // protocol flow (session date boundary), not corruption.
+                None if delta_state.last_was_date => (None, None),
+                None => (
+                    Some(FpssEvent::RawData {
+                        code: code as u8,
+                        payload: payload.to_vec(),
+                    }),
+                    None,
+                ),
             }
         }
 
         StreamMsgType::Trade => {
-            let code = frame.code as u8;
-            match delta_state.decode_tick(code, &frame.payload, TRADE_FIELDS) {
+            let msg_code = code as u8;
+            match delta_state.decode_tick(msg_code, payload, TRADE_FIELDS) {
                 Some((contract_id, f)) => {
                     let (ms_of_day, size, price) = (f[0], f[7], f[9]);
                     let (price_type, date) = (f[14], f[15]);
@@ -1153,122 +1262,160 @@ fn decode_frame(
                         price_type,
                         date,
                     });
-                    // Java only updates OHLCVC if lastOHLCVC already exists
-                    // (seeded by a prior server OHLCVC message). We match this:
-                    // don't emit derived OHLCVC unless the server has seeded one.
-                    if let Some(acc) = delta_state.ohlcvc.get_mut(&contract_id) {
-                        if acc.initialized {
-                            acc.process_trade(ms_of_day, price, size, price_type, date);
-                            let ohlcvc_event = FpssEvent::Data(FpssData::Ohlcvc {
-                                contract_id,
-                                ms_of_day: acc.ms_of_day,
-                                open: acc.open,
-                                high: acc.high,
-                                low: acc.low,
-                                close: acc.close,
-                                volume: acc.volume,
-                                count: acc.count,
-                                price_type: acc.price_type,
-                                date: acc.date,
-                            });
-                            vec![trade_event, ohlcvc_event]
+                    // Derive OHLCVC from trade (Java: OHLCVC.processTrade).
+                    // Only if enabled AND the server has already seeded a bar.
+                    // When derive_ohlcvc is false, skip entirely — zero overhead.
+                    let ohlcvc_event = if derive_ohlcvc {
+                        if let Some(acc) = delta_state.ohlcvc.get_mut(&contract_id) {
+                            if acc.initialized {
+                                acc.process_trade(ms_of_day, price, size, price_type, date);
+                                Some(FpssEvent::Data(FpssData::Ohlcvc {
+                                    contract_id,
+                                    ms_of_day: acc.ms_of_day,
+                                    open: acc.open,
+                                    high: acc.high,
+                                    low: acc.low,
+                                    close: acc.close,
+                                    volume: acc.volume,
+                                    count: acc.count,
+                                    price_type: acc.price_type,
+                                    date: acc.date,
+                                }))
+                            } else {
+                                None
+                            }
                         } else {
-                            vec![trade_event]
+                            None
                         }
                     } else {
-                        vec![trade_event]
-                    }
+                        None
+                    };
+                    (Some(trade_event), ohlcvc_event)
                 }
-                None => vec![FpssEvent::RawData {
-                    code: frame.code as u8,
-                    payload: frame.payload.clone(),
-                }],
+                // DATE markers return None from decode_tick -- normal protocol flow.
+                None if delta_state.last_was_date => (None, None),
+                None => (
+                    Some(FpssEvent::RawData {
+                        code: code as u8,
+                        payload: payload.to_vec(),
+                    }),
+                    None,
+                ),
             }
         }
 
         StreamMsgType::OpenInterest => {
-            let code = frame.code as u8;
-            match delta_state.decode_tick(code, &frame.payload, OI_FIELDS) {
-                Some((contract_id, f)) => vec![FpssEvent::Data(FpssData::OpenInterest {
-                    contract_id,
-                    ms_of_day: f[0],
-                    open_interest: f[1],
-                    date: f[2],
-                })],
-                None => vec![FpssEvent::RawData {
-                    code: frame.code as u8,
-                    payload: frame.payload.clone(),
-                }],
+            let msg_code = code as u8;
+            match delta_state.decode_tick(msg_code, payload, OI_FIELDS) {
+                Some((contract_id, f)) => (
+                    Some(FpssEvent::Data(FpssData::OpenInterest {
+                        contract_id,
+                        ms_of_day: f[0],
+                        open_interest: f[1],
+                        date: f[2],
+                    })),
+                    None,
+                ),
+                None if delta_state.last_was_date => (None, None),
+                None => (
+                    Some(FpssEvent::RawData {
+                        code: code as u8,
+                        payload: payload.to_vec(),
+                    }),
+                    None,
+                ),
             }
         }
 
         StreamMsgType::Ohlcvc => {
-            let code = frame.code as u8;
-            match delta_state.decode_tick(code, &frame.payload, OHLCVC_FIELDS) {
+            let msg_code = code as u8;
+            match delta_state.decode_tick(msg_code, payload, OHLCVC_FIELDS) {
                 Some((contract_id, f)) => {
                     let acc = delta_state
                         .ohlcvc
                         .entry(contract_id)
                         .or_insert_with(OhlcvcAccumulator::new);
                     acc.init_from_server(f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8]);
-                    vec![FpssEvent::Data(FpssData::Ohlcvc {
-                        contract_id,
-                        ms_of_day: f[0],
-                        open: f[1],
-                        high: f[2],
-                        low: f[3],
-                        close: f[4],
-                        volume: f[5],
-                        count: f[6],
-                        price_type: f[7],
-                        date: f[8],
-                    })]
+                    (
+                        Some(FpssEvent::Data(FpssData::Ohlcvc {
+                            contract_id,
+                            ms_of_day: f[0],
+                            open: f[1],
+                            high: f[2],
+                            low: f[3],
+                            close: f[4],
+                            volume: f[5],
+                            count: f[6],
+                            price_type: f[7],
+                            date: f[8],
+                        })),
+                        None,
+                    )
                 }
-                None => vec![FpssEvent::RawData {
-                    code: frame.code as u8,
-                    payload: frame.payload.clone(),
-                }],
+                None if delta_state.last_was_date => (None, None),
+                None => (
+                    Some(FpssEvent::RawData {
+                        code: code as u8,
+                        payload: payload.to_vec(),
+                    }),
+                    None,
+                ),
             }
         }
 
-        StreamMsgType::ReqResponse => match parse_req_response(&frame.payload) {
+        StreamMsgType::ReqResponse => match parse_req_response(payload) {
             Ok((req_id, result)) => {
                 tracing::debug!(req_id, result = ?result, "subscription response");
-                vec![FpssEvent::Control(FpssControl::ReqResponse {
-                    req_id,
-                    result,
-                })]
+                (
+                    Some(FpssEvent::Control(FpssControl::ReqResponse {
+                        req_id,
+                        result,
+                    })),
+                    None,
+                )
             }
             Err(e) => {
                 tracing::warn!(error = %e, "failed to parse REQ_RESPONSE");
-                vec![FpssEvent::Control(FpssControl::Error {
-                    message: format!("failed to parse REQ_RESPONSE: {e}"),
-                })]
+                (
+                    Some(FpssEvent::Control(FpssControl::Error {
+                        message: format!("failed to parse REQ_RESPONSE: {e}"),
+                    })),
+                    None,
+                )
             }
         },
 
         StreamMsgType::Start => {
             tracing::info!("market open signal received");
             delta_state.clear();
-            contract_map.lock().unwrap().clear(); // Java: idToContract.clear()
-            vec![FpssEvent::Control(FpssControl::MarketOpen)]
+            contract_map
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clear(); // Java: idToContract.clear()
+            (Some(FpssEvent::Control(FpssControl::MarketOpen)), None)
         }
 
         StreamMsgType::Stop => {
             tracing::info!("market close signal received");
             delta_state.clear();
-            contract_map.lock().unwrap().clear(); // Java: idToContract.clear()
-            vec![FpssEvent::Control(FpssControl::MarketClose)]
+            contract_map
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clear(); // Java: idToContract.clear()
+            (Some(FpssEvent::Control(FpssControl::MarketClose)), None)
         }
 
         StreamMsgType::Error => {
-            let message = String::from_utf8_lossy(&frame.payload).to_string();
+            let message = String::from_utf8_lossy(payload).to_string();
             tracing::warn!(message = %message, "server error");
-            vec![FpssEvent::Control(FpssControl::ServerError { message })]
+            (
+                Some(FpssEvent::Control(FpssControl::ServerError { message })),
+                None,
+            )
         }
 
         StreamMsgType::Disconnected => {
-            let reason = parse_disconnect_reason(&frame.payload);
+            let reason = parse_disconnect_reason(payload);
             tracing::warn!(reason = ?reason, "server disconnected us");
             authenticated.store(false, Ordering::Release);
 
@@ -1278,13 +1425,16 @@ fn decode_frame(
                 shutdown.store(true, Ordering::Release);
             }
 
-            vec![FpssEvent::Control(FpssControl::Disconnected { reason })]
+            (
+                Some(FpssEvent::Control(FpssControl::Disconnected { reason })),
+                None,
+            )
         }
 
         // Ignore frame types we don't handle (e.g., server sending PING)
         other => {
             tracing::trace!(code = ?other, "ignoring unhandled frame type");
-            vec![]
+            (None, None)
         }
     }
 }
@@ -1395,7 +1545,7 @@ where
 
     // Store the re-subscribed list
     {
-        let mut subs = client.active_subs.lock().unwrap();
+        let mut subs = client.active_subs.lock().unwrap_or_else(|e| e.into_inner());
         *subs = previous_subs;
     }
 

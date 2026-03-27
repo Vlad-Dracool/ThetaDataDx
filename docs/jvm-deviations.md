@@ -9,7 +9,7 @@ Intentional differences between this Rust implementation and the decompiled Java
 As of v1.2.0:
 - **Contract wire format** — now matches Java exactly (fixed in PR #12; previous versions had a protocol-level bug in option contract serialization).
 - **Greeks formulas** — operator precedence now matches Java exactly, including `vera` (fixed in PR #12).
-- **OHLCVC-from-trade derivation** — now matches Java: `OhlcvcAccumulator` only emits OHLCVC events after a server-seeded initial bar, then updates incrementally from trades (added in PR #13).
+- **OHLCVC-from-trade derivation** — matches Java behavior when enabled (default). Unlike Java, this is **opt-in/out**: use `FpssClient::connect_no_ohlcvc()` to disable derived OHLCVC events and reduce per-trade throughput overhead. The Java terminal always derives OHLCVC with no way to disable it.
 
 ## Client-Side Behavior
 
@@ -138,14 +138,6 @@ As of v1.2.0:
 | **Behavior** | Single monolithic event class hierarchy | `FpssEvent` wraps `FpssData` (market data) and `FpssControl` (lifecycle) | No wire change |
 | **Source** | `FPSSClient` internal event handling | `fpss/mod.rs: FpssEvent, FpssData, FpssControl` | |
 | **Rationale** | Java handles all events through a single dispatch path. The Rust split enables exhaustive `match` on data-only events (Quote, Trade, OpenInterest, Ohlcvc) without touching lifecycle events, and vice versa. This is an intentional API improvement — the wire format is unchanged. |
-
-### SIMD FIT Decoding (Intentional Improvement)
-
-| | Java | Rust | Impact |
-|---|---|---|---|
-| **Behavior** | Scalar nibble-by-nibble FIT decode | SSE2-accelerated bulk nibble extraction on x86_64 | Numerically identical, lower latency |
-| **Source** | `FITReader.readChanges()` | `codec/fit.rs: chunk_has_special_nibbles(), extract_nibbles_simd()` | |
-| **Rationale** | The SIMD path scans 16 bytes at a time for special nibbles (field/row separators, negative marker), amortizing the branch misprediction cost. Falls back to scalar on non-x86_64 platforms. Results are bit-identical to the scalar path. |
 
 ### Streaming `_stream` Endpoint Variants (Intentional Improvement)
 

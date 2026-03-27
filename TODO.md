@@ -76,7 +76,6 @@ All resolved:
 All resolved:
 - [x] OHLCVC-from-trade derivation (`OhlcvcAccumulator`, server-seeded)
 - [x] FpssEvent split (`FpssData` + `FpssControl`)
-- [x] SIMD FIT decoding (SSE2 on x86_64)
 - [x] Slab-recycled zstd decompressor
 - [x] Streaming `_stream` endpoint variants (trade, quote for stock + option)
 - [x] `all_greeks` optimization (shared intermediates)

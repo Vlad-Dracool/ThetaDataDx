@@ -1,6 +1,6 @@
 # Benchmarks
 
-44 benchmarks covering every module in thetadatadx, measured with [Criterion.rs](https://github.com/bheisler/criterion.rs).
+43 benchmarks covering every module in thetadatadx, measured with [Criterion.rs](https://github.com/bheisler/criterion.rs).
 
 ## Hardware
 
@@ -16,14 +16,13 @@
 
 ## Results
 
-### FIT Codec (`codec/fit.rs`) - 5 benchmarks
+### FIT Codec (`codec/fit.rs`) - 4 benchmarks
 
 | Benchmark | Median | Per-unit | Description |
 |-----------|--------|----------|-------------|
 | `fit_decode_single_row` | 38.2 ns | 38.2 ns/row | Single trade tick row decode |
 | `fit_decode_100_rows` | 4.51 us | 45.1 ns/row | 100 trade tick rows |
 | `fit_decode_1000_rows_scalar` | 45.5 us | 45.5 ns/row | 1000 rows, scalar path |
-| `fit_decode_1000_rows_simd` | 91.8 us | 91.8 ns/row | 1000 rows, SSE2 bulk scan |
 | `fit_delta_decompression` | 3.95 ns | - | apply_deltas on 16-field tick |
 
 ### FIE Encoder (`codec/fie.rs`) - 4 benchmarks

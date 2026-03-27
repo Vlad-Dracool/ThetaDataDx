@@ -303,14 +303,6 @@ The `OhlcvcAccumulator` derives OHLCVC bars from trade ticks in real time. Behav
 
 This matches the Java terminal's behavior: OHLCVC bars are never emitted purely from trades without a server-provided seed.
 
-### SIMD FIT Decoding
-
-On x86_64 with SSE2, the FIT decoder uses SIMD-accelerated bulk nibble extraction:
-- `chunk_has_special_nibbles()` — scans 16 bytes for field/row separators and negative markers
-- `extract_nibbles_simd()` — unpacks high/low nibbles from 16 bytes in parallel
-
-The SIMD pre-scan amortizes branch misprediction cost in the scalar decoder. Results are bit-identical to the scalar path. Non-x86_64 platforms fall back to scalar.
-
 FPSS streaming is available in all SDKs:
 - **Rust**: `FpssClient::connect()` returns a disruptor-backed event receiver
 - **Python**: `FpssClient` class with `subscribe()`, `next_event()`, `shutdown()`

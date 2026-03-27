@@ -11,6 +11,7 @@
 #include "thetadatadx.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 #include <utility>
@@ -505,6 +506,27 @@ public:
 
     /** Subscribe to trade data for a stock symbol. Returns request ID. */
     int subscribe_trades(const std::string& symbol);
+
+    /** Subscribe to open interest data for a stock symbol. Returns request ID. */
+    int subscribe_open_interest(const std::string& symbol);
+
+    /** Subscribe to all trades for a security type ("STOCK", "OPTION", "INDEX"). Returns request ID. */
+    int subscribe_full_trades(const std::string& sec_type);
+
+    /** Unsubscribe from open interest data. Returns request ID. */
+    int unsubscribe_open_interest(const std::string& symbol);
+
+    /** Unsubscribe from trade data. Returns request ID. */
+    int unsubscribe_trades(const std::string& symbol);
+
+    /** Check if the client is currently authenticated. */
+    bool is_authenticated() const;
+
+    /** Look up a contract by server-assigned ID. Returns empty optional if not found. */
+    std::optional<std::string> contract_lookup(int id) const;
+
+    /** Get active subscriptions as a JSON array string. */
+    std::string active_subscriptions() const;
 
     /** Poll for the next event. Returns JSON string, or empty string on timeout. */
     std::string next_event(uint64_t timeout_ms);

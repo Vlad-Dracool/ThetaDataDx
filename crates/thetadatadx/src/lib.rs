@@ -71,6 +71,7 @@ pub mod direct;
 pub mod error;
 pub mod fpss;
 pub mod greeks;
+pub mod registry;
 pub mod types;
 
 /// Generated protobuf types from `endpoints.proto` (shared types).
@@ -98,3 +99,4 @@ pub use auth::Credentials;
 pub use config::DirectConfig;
 pub use direct::DirectClient;
 pub use error::Error;
+pub use registry::{EndpointMeta, ParamMeta, ParamType, ReturnType, ENDPOINTS};

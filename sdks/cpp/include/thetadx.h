@@ -398,8 +398,29 @@ int tdx_fpss_subscribe_quotes(const TdxFpssHandle* h, const char* symbol);
 /** Subscribe to trade data. Returns request ID or -1 on error. */
 int tdx_fpss_subscribe_trades(const TdxFpssHandle* h, const char* symbol);
 
+/** Subscribe to open interest data. Returns request ID or -1 on error. */
+int tdx_fpss_subscribe_open_interest(const TdxFpssHandle* h, const char* symbol);
+
+/** Subscribe to all trades for a security type. sec_type: "STOCK", "OPTION", "INDEX". Returns request ID or -1. */
+int tdx_fpss_subscribe_full_trades(const TdxFpssHandle* h, const char* sec_type);
+
 /** Unsubscribe from quote data. Returns request ID or -1 on error. */
 int tdx_fpss_unsubscribe_quotes(const TdxFpssHandle* h, const char* symbol);
+
+/** Unsubscribe from trade data. Returns request ID or -1 on error. */
+int tdx_fpss_unsubscribe_trades(const TdxFpssHandle* h, const char* symbol);
+
+/** Unsubscribe from open interest data. Returns request ID or -1 on error. */
+int tdx_fpss_unsubscribe_open_interest(const TdxFpssHandle* h, const char* symbol);
+
+/** Check if authenticated. Returns 1 if true, 0 if false. */
+int tdx_fpss_is_authenticated(const TdxFpssHandle* h);
+
+/** Look up a contract by server-assigned ID. Returns string or NULL. Caller must free with tdx_string_free. */
+char* tdx_fpss_contract_lookup(const TdxFpssHandle* h, int id);
+
+/** Get active subscriptions as JSON array. Caller must free with tdx_string_free. */
+char* tdx_fpss_active_subscriptions(const TdxFpssHandle* h);
 
 /** Poll for the next event. Returns JSON string or NULL on timeout. Caller must free with tdx_string_free. */
 char* tdx_fpss_next_event(const TdxFpssHandle* h, uint64_t timeout_ms);

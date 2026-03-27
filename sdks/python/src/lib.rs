@@ -1875,6 +1875,155 @@ impl FpssClient {
         client.unsubscribe_trades(&contract).map_err(to_py_err)
     }
 
+    /// Unsubscribe from open interest data for a stock symbol.
+    fn unsubscribe_open_interest(&self, symbol: &str) -> PyResult<i32> {
+        let guard = self.inner.lock().unwrap();
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| PyRuntimeError::new_err("FpssClient is shut down"))?;
+        let contract = fpss::protocol::Contract::stock(symbol);
+        client
+            .unsubscribe_open_interest(&contract)
+            .map_err(to_py_err)
+    }
+
+    /// Subscribe to all trades for a security type (full trade stream).
+    ///
+    /// Args:
+    ///     sec_type: One of "STOCK", "OPTION", "INDEX"
+    ///
+    /// Returns the request ID for this subscription.
+    fn subscribe_full_trades(&self, sec_type: &str) -> PyResult<i32> {
+        let guard = self.inner.lock().unwrap();
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| PyRuntimeError::new_err("FpssClient is shut down"))?;
+        let st = match sec_type.to_uppercase().as_str() {
+            "STOCK" => thetadatadx::types::enums::SecType::Stock,
+            "OPTION" => thetadatadx::types::enums::SecType::Option,
+            "INDEX" => thetadatadx::types::enums::SecType::Index,
+            other => {
+                return Err(PyValueError::new_err(format!(
+                    "unknown sec_type: {other:?} (expected STOCK, OPTION, or INDEX)"
+                )))
+            }
+        };
+        client.subscribe_full_trades(st).map_err(to_py_err)
+    }
+
+    /// Subscribe to open interest data for an option contract.
+    ///
+    /// Args:
+    ///     symbol: Underlying ticker (e.g. "AAPL")
+    ///     exp_date: Expiration as YYYYMMDD integer (e.g. 20260320)
+    ///     is_call: True for call, False for put
+    ///     strike: Strike price in ThetaData integer encoding
+    ///
+    /// Returns the request ID for this subscription.
+    fn subscribe_option_open_interest(
+        &self,
+        symbol: &str,
+        exp_date: i32,
+        is_call: bool,
+        strike: i32,
+    ) -> PyResult<i32> {
+        let guard = self.inner.lock().unwrap();
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| PyRuntimeError::new_err("FpssClient is shut down"))?;
+        let contract = fpss::protocol::Contract::option(symbol, exp_date, is_call, strike);
+        client
+            .subscribe_open_interest(&contract)
+            .map_err(to_py_err)
+    }
+
+    /// Unsubscribe from quote data for an option contract.
+    fn unsubscribe_option_quotes(
+        &self,
+        symbol: &str,
+        exp_date: i32,
+        is_call: bool,
+        strike: i32,
+    ) -> PyResult<i32> {
+        let guard = self.inner.lock().unwrap();
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| PyRuntimeError::new_err("FpssClient is shut down"))?;
+        let contract = fpss::protocol::Contract::option(symbol, exp_date, is_call, strike);
+        client.unsubscribe_quotes(&contract).map_err(to_py_err)
+    }
+
+    /// Unsubscribe from trade data for an option contract.
+    fn unsubscribe_option_trades(
+        &self,
+        symbol: &str,
+        exp_date: i32,
+        is_call: bool,
+        strike: i32,
+    ) -> PyResult<i32> {
+        let guard = self.inner.lock().unwrap();
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| PyRuntimeError::new_err("FpssClient is shut down"))?;
+        let contract = fpss::protocol::Contract::option(symbol, exp_date, is_call, strike);
+        client.unsubscribe_trades(&contract).map_err(to_py_err)
+    }
+
+    /// Get the current contract map (server-assigned IDs -> contract strings).
+    ///
+    /// Returns a dict mapping integer contract IDs to their string representation.
+    fn contract_map(&self) -> PyResult<std::collections::HashMap<i32, String>> {
+        let guard = self.inner.lock().unwrap();
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| PyRuntimeError::new_err("FpssClient is shut down"))?;
+        Ok(client
+            .contract_map()
+            .into_iter()
+            .map(|(id, c)| (id, format!("{c}")))
+            .collect())
+    }
+
+    /// Look up a single contract by its server-assigned ID.
+    ///
+    /// Returns the contract string, or None if not found.
+    fn contract_lookup(&self, id: i32) -> PyResult<Option<String>> {
+        let guard = self.inner.lock().unwrap();
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| PyRuntimeError::new_err("FpssClient is shut down"))?;
+        Ok(client.contract_lookup(id).map(|c| format!("{c}")))
+    }
+
+    /// Get a snapshot of currently active subscriptions.
+    ///
+    /// Returns a list of dicts, each with "kind" and "contract" keys.
+    fn active_subscriptions(&self) -> PyResult<Vec<std::collections::HashMap<String, String>>> {
+        let guard = self.inner.lock().unwrap();
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| PyRuntimeError::new_err("FpssClient is shut down"))?;
+        Ok(client
+            .active_subscriptions()
+            .into_iter()
+            .map(|(kind, contract)| {
+                let mut m = std::collections::HashMap::new();
+                m.insert("kind".to_string(), format!("{kind:?}"));
+                m.insert("contract".to_string(), format!("{contract}"));
+                m
+            })
+            .collect())
+    }
+
+    /// Get the server address the client is connected to.
+    fn server_addr(&self) -> PyResult<String> {
+        let guard = self.inner.lock().unwrap();
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| PyRuntimeError::new_err("FpssClient is shut down"))?;
+        Ok(client.server_addr().to_string())
+    }
+
     /// Poll for the next FPSS event.
     ///
     /// Args:

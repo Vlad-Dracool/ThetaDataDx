@@ -1552,12 +1552,13 @@ dependencies = [
 
 [[package]]
 name = "thetadatadx"
-version = "1.2.1"
+version = "1.2.4"
 dependencies = [
  "disruptor",
  "prost",
  "prost-build",
  "prost-types",
+ "regex",
  "reqwest",
  "rustls",
  "serde",
@@ -1576,7 +1577,7 @@ dependencies = [
 
 [[package]]
 name = "thetadatadx-py"
-version = "1.2.1"
+version = "1.2.4"
 dependencies = [
  "pyo3",
  "thetadatadx",

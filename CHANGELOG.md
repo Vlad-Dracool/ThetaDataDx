@@ -5,6 +5,62 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-03-27
+
+### New Products
+
+- **`tdx` CLI** (`tools/cli/`) — command-line tool with all 61 endpoints + Greeks + IV.
+  Dynamically generated from endpoint registry. `cargo install thetadatadx-cli`
+- **MCP Server** (`tools/mcp/`) — Model Context Protocol server giving LLMs instant
+  access to 64 tools (61 endpoints + ping + greeks + IV) over JSON-RPC stdio.
+  Works with Claude Code, Cursor, Codex.
+- **REST+WS Server** (`tools/server/`) — drop-in replacement for the Java terminal.
+  v3 API on port 25503, WebSocket on 25520 with real FPSS bridge. sonic-rs JSON.
+- **mdBook documentation site** (`docs-site/`) — 33 pages covering API reference,
+  guides, SDK docs, wire protocol internals. Deployed to GitHub Pages.
+
+### Breaking Changes
+
+- **FpssEvent split** — `FpssEvent::Quote { .. }` is now `FpssEvent::Data(FpssData::Quote { .. })`.
+  Control events are `FpssEvent::Control(FpssControl::*)`. Migration: wrap your match arms.
+- **OHLCVC derivation opt-in/out** — `connect()` still derives OHLCVC (default).
+  New `connect_no_ohlcvc()` disables it for lower overhead on full trade streams.
+- **FpssClient is fully sync** — no tokio in the streaming path. LMAX Disruptor
+  ring buffer. Callback API: `FnMut(&FpssEvent)`.
+
+### Added
+
+- **Endpoint registry** — auto-generated from proto at build time. Single source of
+  truth consumed by CLI, MCP, server. 61 endpoints.
+- **Repo reorganization** — `tools/cli/`, `tools/mcp/`, `tools/server/` (was `crates/*`)
+- **sonic-rs** — SIMD-accelerated JSON in CLI, MCP, and server (replaces serde_json)
+- **Zero-alloc FPSS hot path** — reusable frame buffer, tuple return (no Vec per frame),
+  pre-allocated decode buffer, wrapping_add for delta parity
+- **Full SDK parity** — all FPSS methods (subscribe_full_trades, contract_lookup,
+  active_subscriptions, etc.) exposed in Python, Go, C++, FFI
+- **Full trade stream docs** — explains the server's quote+trade+OHLC bundle behavior
+- **v3 REST API** — server routes match ThetaData's OpenAPI v3 spec (was v2)
+- **43 benchmarks** — 10 per-module bench files covering every hot path
+
+### Fixed
+
+- **SIMD FIT removed** — was 2.2x slower than scalar (regression). Pure scalar now.
+- **Server trade_greeks routes** — 5 option history trade_greeks endpoints were silently
+  dropped due to subcategory mismatch in path generation
+- **All Gemini findings** — hot-path allocations, wrapping_add, BufWriter, find_header
+  fallback, DATE marker handling, MCP sanitization, Price dedup
+- **All Codex findings** — server security (CORS, shutdown auth), CLI expect(), MCP
+  JSON-RPC validation, stale docs
+- **Auth response parsing** — subscription fields are integers not strings
+
+### Performance
+
+- FPSS frame read: zero-alloc (reusable buffer)
+- FPSS decode: zero-alloc (tuple return, pre-allocated tick buffer)
+- Delta: wrapping_add (matches Java, no branch)
+- Required column validation (skip rows on missing headers, no garbage parse)
+- 43 criterion benchmarks across all modules
+
 ## [1.2.2] - 2026-03-26
 
 ### Added
@@ -41,9 +97,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Control(FpssControl)` for lifecycle events (LoginSuccess, Disconnected, MarketOpen, etc.),
   and `RawData` for unparsed frames. This enables `match` arms that handle all data without
   touching control flow, and vice versa — an intentional improvement not present in Java.
-- **SIMD FIT decoding** — SSE2-accelerated bulk nibble extraction on x86_64. Scans 16 bytes
-  at a time for special nibbles (field/row separators, negative marker), reducing branch
-  misprediction overhead in the FIT hot path.
 - **Streaming `_stream` endpoint variants** — `stock_history_trade_stream`,
   `stock_history_quote_stream`, `option_history_trade_stream`, `option_history_quote_stream`
   process gRPC response chunks via callback without materializing the full response in memory.
@@ -51,7 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Slab-recycled zstd decompressor** — thread-local `(Decompressor, Vec<u8>)` pair reuses
   the working buffer across calls. The internal slab retains its capacity, avoiding allocator
   pressure for repeated decompressions of similar-sized payloads.
-- **148 tests** — new tests for OHLCVC accumulator, FpssEvent split, SIMD FIT, and
+- **148 tests** — new tests for OHLCVC accumulator, FpssEvent split, and
   streaming endpoints.
 
 ### Fixed (PR #12)
@@ -135,8 +188,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
-- **SIMD FIT decoding** — SSE2-accelerated nibble extraction on x86_64 reduces per-tick
-  decode latency for the FPSS hot path.
 - **Slab-recycled zstd** — thread-local decompressor reuses its working buffer, eliminating
   per-chunk allocation overhead.
 - **Streaming `_stream` endpoints** — process gRPC responses chunk-by-chunk without

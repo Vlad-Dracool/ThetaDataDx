@@ -1,0 +1,29 @@
+[package]
+name = "thetadatadx-server"
+version = "2.0.0"
+edition = "2021"
+rust-version = "1.85"
+authors = ["userFRM"]
+description = "Drop-in Rust replacement for the ThetaData Java Terminal"
+documentation = "https://docs.rs/thetadatadx-server"
+homepage = "https://github.com/userFRM/ThetaDataDx"
+repository = "https://github.com/userFRM/ThetaDataDx"
+license = "GPL-3.0-or-later"
+keywords = ["thetadata", "terminal", "market-data", "rest-api", "websocket"]
+categories = ["finance", "network-programming", "web-programming::http-server"]
+
+[[bin]]
+name = "thetadatadx-server"
+path = "src/main.rs"
+
+[dependencies]
+thetadatadx = { path = "../../crates/thetadatadx" }
+axum = { version = "0.8", features = ["ws"] }
+tokio = { version = "1", features = ["full"] }
+sonic-rs = "0.3"
+serde = { version = "1", features = ["derive"] }
+tower-http = { version = "0.6", features = ["cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive"] }
+uuid = { version = "1", features = ["v4"] }

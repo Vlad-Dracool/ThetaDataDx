@@ -61,15 +61,24 @@ impl Frame {
     }
 }
 
-/// Read a single FPSS frame from a blocking reader.
+/// Read a single FPSS frame into a caller-owned buffer, avoiding per-frame
+/// heap allocation on the hot path.
 ///
-/// # Wire format (from `PacketStream.readFrame()`)
+/// On success returns `Some((code, payload_len))` where `buf[..payload_len]`
+/// holds the payload bytes. Returns `None` on clean EOF (reader closed).
 ///
-/// Reads exactly `[LEN: u8] [CODE: u8]`, then reads `LEN` bytes of payload.
+/// # Buffer reuse
 ///
-/// Returns `None` on clean EOF (reader closed). Returns `Err` on partial reads
-/// or unknown message codes.
-pub fn read_frame<R: Read>(reader: &mut R) -> Result<Option<Frame>, crate::error::Error> {
+/// The caller passes in a reusable `Vec<u8>` that is `.clear()`ed and
+/// `.resize()`d each call. Because `Vec` retains its capacity, repeated
+/// calls with similarly-sized frames hit zero allocator calls after the
+/// first frame.
+pub fn read_frame_into<R: Read>(
+    reader: &mut R,
+    buf: &mut Vec<u8>,
+) -> Result<Option<(StreamMsgType, usize)>, crate::error::Error> {
+    buf.clear();
+
     // Read the 2-byte header.
     // Only treat as clean EOF if zero bytes were read (true connection close).
     // A partial header (1 byte read then EOF) indicates framing corruption.
@@ -113,13 +122,28 @@ pub fn read_frame<R: Read>(reader: &mut R) -> Result<Option<Frame>, crate::error
         crate::error::Error::FpssProtocol(format!("unknown message code: {code_byte}"))
     })?;
 
-    // Read the payload
-    let mut payload = vec![0u8; payload_len];
+    // Read the payload into the reusable buffer.
+    buf.resize(payload_len, 0);
     if payload_len > 0 {
-        reader.read_exact(&mut payload)?;
+        reader.read_exact(buf)?;
     }
 
-    Ok(Some(Frame { code, payload }))
+    Ok(Some((code, payload_len)))
+}
+
+/// Read a single FPSS frame from a blocking reader.
+///
+/// Convenience wrapper around [`read_frame_into`] that allocates a fresh
+/// `Vec<u8>` per call. Prefer `read_frame_into` on the hot path.
+///
+/// Returns `None` on clean EOF (reader closed). Returns `Err` on partial reads
+/// or unknown message codes.
+pub fn read_frame<R: Read>(reader: &mut R) -> Result<Option<Frame>, crate::error::Error> {
+    let mut buf = Vec::new();
+    match read_frame_into(reader, &mut buf)? {
+        Some((code, _len)) => Ok(Some(Frame { code, payload: buf })),
+        None => Ok(None),
+    }
 }
 
 /// Write a single FPSS frame to a blocking writer.
