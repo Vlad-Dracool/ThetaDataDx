@@ -205,3 +205,33 @@ div[class*='language-'] .lang {
   margin-left: 8px;
   vertical-align: middle;
 }
+
+/* ===== SVG Icon Theme Adaptation ===== */
+
+/* Language selector icons */
+.language-icon {
+  filter: brightness(0);
+  transition: filter 0.2s ease;
+}
+.dark .language-icon {
+  filter: brightness(0) invert(1);
+}
+.language-pill.active .language-icon {
+  filter: brightness(0) invert(1);
+}
+
+/* Feature card icons on homepage */
+.VPFeature .VPImage {
+  filter: brightness(0) opacity(0.8);
+  transition: filter 0.2s ease;
+}
+.dark .VPFeature .VPImage {
+  filter: brightness(0) invert(1) opacity(0.8);
+}
+.VPFeature:hover .VPImage {
+  opacity: 1;
+  filter: none;
+}
+.dark .VPFeature:hover .VPImage {
+  filter: invert(1);
+}
