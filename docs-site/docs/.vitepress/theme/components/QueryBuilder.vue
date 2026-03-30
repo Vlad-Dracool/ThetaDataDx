@@ -1,1034 +1,451 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-type DataMode = 'historical' | 'streaming'
-type AssetType = 'stock' | 'option' | 'index' | 'calendar' | 'rate'
-type Language = 'rust' | 'python'
+type RecipeId =
+  | 'stock_price_history'
+  | 'option_chain_snapshot'
+  | 'gamma_exposure'
+  | 'vol_surface'
+  | 'unusual_activity'
+  | 'put_call_ratio'
+  | 'historical_greeks'
+  | 'volume_profile'
+  | 'market_calendar'
+  | 'live_quote_monitor'
+  | 'trade_tape'
+  | 'option_flow_scanner'
+  | 'live_option_chain'
 
-interface DataTypeOption {
-  id: string
-  label: string
+type Language = 'python' | 'rust'
+
+interface Recipe {
+  id: RecipeId
+  icon: string
+  title: string
   description: string
+  category: 'historical' | 'realtime'
+  params: ParamKey[]
 }
 
-interface Params {
+type ParamKey =
+  | 'symbol'
+  | 'symbols_list'
+  | 'date_range'
+  | 'single_date'
+  | 'interval'
+  | 'expiration'
+  | 'strike'
+  | 'right'
+  | 'year'
+  | 'min_size'
+
+interface SymbolSuggestion {
   symbol: string
-  start_date: string
-  end_date: string
-  date: string
-  interval: string
-  expiration: string
-  strike: string
-  right: 'C' | 'P'
-  time: string
-  year: string
-  rate_symbol: string
+  name: string
+  category: string
 }
 
-// ─── State ───────────────────────────────────────────────────────────────────
+interface DatePreset {
+  label: string
+  value: () => string
+  rangeValue?: () => { start: string; end: string }
+  isRange?: boolean
+}
 
-const step = ref(1)
-const dataMode = ref<DataMode | null>(null)
-const assetType = ref<AssetType | null>(null)
-const dataType = ref<string | null>(null)
-const language = ref<Language | null>(null)
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-const params = ref<Params>({
-  symbol: 'AAPL',
-  start_date: '20240101',
-  end_date: '20240131',
-  date: '20240101',
-  interval: '60000',
-  expiration: '20240621',
-  strike: '450',
-  right: 'C',
-  time: '093000',
-  year: '2024',
-  rate_symbol: 'SOFR',
-})
+const SYMBOL_SUGGESTIONS: SymbolSuggestion[] = [
+  // Mega Cap
+  { symbol: 'AAPL',  name: 'Apple Inc.',              category: 'Mega Cap' },
+  { symbol: 'MSFT',  name: 'Microsoft Corp.',          category: 'Mega Cap' },
+  { symbol: 'GOOG',  name: 'Alphabet Inc.',            category: 'Mega Cap' },
+  { symbol: 'AMZN',  name: 'Amazon.com Inc.',          category: 'Mega Cap' },
+  { symbol: 'NVDA',  name: 'NVIDIA Corp.',             category: 'Mega Cap' },
+  { symbol: 'META',  name: 'Meta Platforms Inc.',      category: 'Mega Cap' },
+  { symbol: 'TSLA',  name: 'Tesla Inc.',               category: 'Mega Cap' },
+  { symbol: 'BRK.B', name: 'Berkshire Hathaway B',    category: 'Mega Cap' },
+  // Popular ETFs
+  { symbol: 'SPY',  name: 'SPDR S&P 500 ETF',         category: 'ETF' },
+  { symbol: 'QQQ',  name: 'Invesco QQQ Trust',         category: 'ETF' },
+  { symbol: 'IWM',  name: 'iShares Russell 2000 ETF',  category: 'ETF' },
+  { symbol: 'DIA',  name: 'SPDR Dow Jones ETF',        category: 'ETF' },
+  { symbol: 'XLF',  name: 'Financial Select SPDR',     category: 'ETF' },
+  { symbol: 'XLE',  name: 'Energy Select SPDR',        category: 'ETF' },
+  { symbol: 'GLD',  name: 'SPDR Gold Shares',          category: 'ETF' },
+  { symbol: 'TLT',  name: 'iShares 20+ Year Treasury', category: 'ETF' },
+  { symbol: 'VIX',  name: 'CBOE Volatility Index',     category: 'ETF' },
+  // Meme / Active
+  { symbol: 'GME',  name: 'GameStop Corp.',            category: 'Active' },
+  { symbol: 'AMC',  name: 'AMC Entertainment',         category: 'Active' },
+  { symbol: 'PLTR', name: 'Palantir Technologies',     category: 'Active' },
+  { symbol: 'SOFI', name: 'SoFi Technologies',         category: 'Active' },
+  { symbol: 'RIVN', name: 'Rivian Automotive',         category: 'Active' },
+  { symbol: 'LCID', name: 'Lucid Group Inc.',          category: 'Active' },
+]
 
+const RECIPES: Recipe[] = [
+  // Historical
+  {
+    id: 'stock_price_history',
+    icon: '📈',
+    title: 'Stock Price History',
+    description: 'OHLC bars, EOD data, or trade ticks for any symbol',
+    category: 'historical',
+    params: ['symbol', 'date_range', 'interval'],
+  },
+  {
+    id: 'option_chain_snapshot',
+    icon: '🔗',
+    title: 'Option Chain Snapshot',
+    description: 'Full chain with Greeks for a given expiration',
+    category: 'historical',
+    params: ['symbol', 'expiration'],
+  },
+  {
+    id: 'gamma_exposure',
+    icon: '⚡',
+    title: 'Gamma Exposure (GEX)',
+    description: 'Net gamma exposure across all strikes — dealer positioning',
+    category: 'historical',
+    params: ['symbol', 'expiration'],
+  },
+  {
+    id: 'vol_surface',
+    icon: '🌊',
+    title: 'Volatility Surface',
+    description: 'IV across strikes and expirations for a 3D surface',
+    category: 'historical',
+    params: ['symbol'],
+  },
+  {
+    id: 'unusual_activity',
+    icon: '🔎',
+    title: 'Unusual Options Activity',
+    description: 'High volume/OI ratio contracts signaling smart money',
+    category: 'historical',
+    params: ['symbol', 'single_date'],
+  },
+  {
+    id: 'put_call_ratio',
+    icon: '⚖️',
+    title: 'Put/Call Ratio',
+    description: 'Aggregate put vs call volume and open interest',
+    category: 'historical',
+    params: ['symbol', 'expiration'],
+  },
+  {
+    id: 'historical_greeks',
+    icon: '🧮',
+    title: 'Historical Greeks',
+    description: 'Track how Greeks evolved over time for a contract',
+    category: 'historical',
+    params: ['symbol', 'expiration', 'strike', 'right', 'date_range', 'interval'],
+  },
+  {
+    id: 'volume_profile',
+    icon: '📊',
+    title: 'Volume Profile',
+    description: 'Trade distribution by price level across a date range',
+    category: 'historical',
+    params: ['symbol', 'date_range', 'interval'],
+  },
+  {
+    id: 'market_calendar',
+    icon: '📅',
+    title: 'Market Calendar',
+    description: 'Trading days, holidays, and early closes for a year',
+    category: 'historical',
+    params: ['year'],
+  },
+  // Real-Time
+  {
+    id: 'live_quote_monitor',
+    icon: '📡',
+    title: 'Live Quote Monitor',
+    description: 'Real-time bid/ask stream for one or more stocks',
+    category: 'realtime',
+    params: ['symbols_list'],
+  },
+  {
+    id: 'trade_tape',
+    icon: '🎞️',
+    title: 'Trade Tape',
+    description: 'Real-time trade stream with symbol filtering',
+    category: 'realtime',
+    params: ['symbols_list'],
+  },
+  {
+    id: 'option_flow_scanner',
+    icon: '🌊',
+    title: 'Option Flow Scanner',
+    description: 'Full option trade firehose — flag unusual premium',
+    category: 'realtime',
+    params: ['min_size'],
+  },
+  {
+    id: 'live_option_chain',
+    icon: '⚙️',
+    title: 'Live Option Chain',
+    description: 'Streaming Greeks for an entire chain in real time',
+    category: 'realtime',
+    params: ['symbol', 'expiration'],
+  },
+]
+
+const INTERVAL_OPTIONS = [
+  { label: 'Every tick', value: '0' },
+  { label: '1 min',      value: '60000' },
+  { label: '5 min',      value: '300000' },
+  { label: '15 min',     value: '900000' },
+  { label: '30 min',     value: '1800000' },
+  { label: '1 hour',     value: '3600000' },
+]
+
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+
+function toYYYYMMDD(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const dy = String(d.getDate()).padStart(2, '0')
+  return `${y}${m}${dy}`
+}
+
+function prevWeekday(d: Date): Date {
+  const result = new Date(d)
+  const day = result.getDay()
+  if (day === 0) result.setDate(result.getDate() - 2)
+  else if (day === 6) result.setDate(result.getDate() - 1)
+  return result
+}
+
+function lastTradingDay(): string {
+  const now = new Date()
+  // Before 4pm on a weekday use today, otherwise previous weekday
+  const day = now.getDay()
+  const hour = now.getHours()
+  const isWeekday = day >= 1 && day <= 5
+  if (isWeekday && hour < 16) return toYYYYMMDD(now)
+  return toYYYYMMDD(prevWeekday(now))
+}
+
+function daysAgo(n: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() - n)
+  return toYYYYMMDD(prevWeekday(d))
+}
+
+function ytdStart(): string {
+  const d = new Date()
+  return `${d.getFullYear()}0101`
+}
+
+const DATE_PRESETS: DatePreset[] = [
+  {
+    label: 'Today',
+    isRange: false,
+    value: () => lastTradingDay(),
+  },
+  {
+    label: 'Yesterday',
+    isRange: false,
+    value: () => daysAgo(1),
+  },
+  {
+    label: 'Last Week',
+    isRange: true,
+    value: () => daysAgo(7),
+    rangeValue: () => ({ start: daysAgo(7), end: lastTradingDay() }),
+  },
+  {
+    label: 'Last Month',
+    isRange: true,
+    value: () => daysAgo(30),
+    rangeValue: () => ({ start: daysAgo(30), end: lastTradingDay() }),
+  },
+  {
+    label: 'Last 3 Months',
+    isRange: true,
+    value: () => daysAgo(90),
+    rangeValue: () => ({ start: daysAgo(90), end: lastTradingDay() }),
+  },
+  {
+    label: 'YTD',
+    isRange: true,
+    value: () => ytdStart(),
+    rangeValue: () => ({ start: ytdStart(), end: lastTradingDay() }),
+  },
+  {
+    label: 'Last Year',
+    isRange: true,
+    value: () => daysAgo(365),
+    rangeValue: () => ({ start: daysAgo(365), end: lastTradingDay() }),
+  },
+]
+
+// ─── State ────────────────────────────────────────────────────────────────────
+
+const step = ref<1 | 2 | 3 | 4>(1)
+const selectedRecipe = ref<Recipe | null>(null)
+const language = ref<Language>('python')
 const copied = ref(false)
 
-// ─── Step navigation ─────────────────────────────────────────────────────────
+const params = ref({
+  symbol:      'AAPL',
+  symbolsRaw:  'AAPL, MSFT, SPY',
+  start_date:  daysAgo(30),
+  end_date:    lastTradingDay(),
+  date:        lastTradingDay(),
+  interval:    '300000',
+  expiration:  '20251219',
+  strike:      '500000',
+  right:       'C' as 'C' | 'P',
+  year:        String(new Date().getFullYear()),
+  min_size:    '100',
+})
 
-function selectDataMode(mode: DataMode) {
-  dataMode.value = mode
-  assetType.value = null
-  dataType.value = null
-  language.value = null
+// Symbol autocomplete
+const symbolInput = ref('')
+const symbolInputFocused = ref(false)
+const autocompleteVisible = ref(false)
+const acSelectedIdx = ref(-1)
+const autocompleteRef = ref<HTMLElement | null>(null)
+
+// Active date preset for range/single
+const activeDatePreset = ref<string>('')
+const activeSinglePreset = ref<string>('')
+
+// ─── Computed ─────────────────────────────────────────────────────────────────
+
+const historicalRecipes = computed(() => RECIPES.filter(r => r.category === 'historical'))
+const realtimeRecipes   = computed(() => RECIPES.filter(r => r.category === 'realtime'))
+
+const currentRecipe = computed(() => selectedRecipe.value)
+
+const needsSymbol       = computed(() => currentRecipe.value?.params.includes('symbol') ?? false)
+const needsSymbolsList  = computed(() => currentRecipe.value?.params.includes('symbols_list') ?? false)
+const needsDateRange    = computed(() => currentRecipe.value?.params.includes('date_range') ?? false)
+const needsSingleDate   = computed(() => currentRecipe.value?.params.includes('single_date') ?? false)
+const needsInterval     = computed(() => currentRecipe.value?.params.includes('interval') ?? false)
+const needsExpiration   = computed(() => currentRecipe.value?.params.includes('expiration') ?? false)
+const needsStrike       = computed(() => currentRecipe.value?.params.includes('strike') ?? false)
+const needsRight        = computed(() => currentRecipe.value?.params.includes('right') ?? false)
+const needsYear         = computed(() => currentRecipe.value?.params.includes('year') ?? false)
+const needsMinSize      = computed(() => currentRecipe.value?.params.includes('min_size') ?? false)
+
+const filteredSuggestions = computed(() => {
+  const q = symbolInput.value.toUpperCase().trim()
+  if (!q) return SYMBOL_SUGGESTIONS
+  return SYMBOL_SUGGESTIONS.filter(
+    s => s.symbol.startsWith(q) || s.name.toUpperCase().includes(q)
+  )
+})
+
+const symbolsByCategory = computed(() => {
+  const map = new Map<string, SymbolSuggestion[]>()
+  for (const s of filteredSuggestions.value) {
+    if (!map.has(s.category)) map.set(s.category, [])
+    map.get(s.category)!.push(s)
+  }
+  return map
+})
+
+const symbolsList = computed(() =>
+  params.value.symbolsRaw
+    .split(/[,\s]+/)
+    .map(s => s.trim().toUpperCase())
+    .filter(Boolean)
+)
+
+const generatedCode = computed((): string => {
+  if (!currentRecipe.value) return ''
+  if (language.value === 'python') return genPython()
+  return genRust()
+})
+
+// ─── Actions ─────────────────────────────────────────────────────────────────
+
+function pickRecipe(recipe: Recipe) {
+  selectedRecipe.value = recipe
+  symbolInput.value = params.value.symbol
   step.value = 2
 }
 
-function selectAssetType(asset: AssetType) {
-  assetType.value = asset
-  dataType.value = null
-  language.value = null
+function goStep(n: 1 | 2 | 3 | 4) {
+  if (n <= step.value) step.value = n
+}
+
+function toStep3() {
   step.value = 3
 }
 
-function selectDataType(dt: string) {
-  dataType.value = dt
-  language.value = null
+function toStep4(lang: Language) {
+  language.value = lang
+  if (typeof localStorage !== 'undefined') localStorage.setItem('qb-lang', lang)
   step.value = 4
 }
 
-function selectLanguage(lang: Language) {
-  language.value = lang
-  step.value = 6
+function startOver() {
+  step.value = 1
+  selectedRecipe.value = null
+  activeDatePreset.value = ''
+  activeSinglePreset.value = ''
 }
 
-function goToStep(n: number) {
-  if (n < step.value) step.value = n
-}
-
-// ─── Data-type option definitions ────────────────────────────────────────────
-
-const dataTypeOptions = computed((): DataTypeOption[] => {
-  if (!dataMode.value || !assetType.value) return []
-
-  if (dataMode.value === 'historical') {
-    switch (assetType.value) {
-      case 'stock':
-        return [
-          { id: 'eod', label: 'End-of-Day (EOD)', description: 'Daily OHLCV bars' },
-          { id: 'ohlc', label: 'Intraday OHLC', description: '1min / 5min / 15min bars' },
-          { id: 'trade', label: 'Trades', description: 'Every trade tick' },
-          { id: 'quote', label: 'Quotes', description: 'NBBO quotes' },
-          { id: 'trade_quote', label: 'Trade + Quote', description: 'Combined trade & quote stream' },
-          { id: 'snapshot_ohlc', label: 'Snapshot OHLC', description: 'Latest OHLC bar' },
-          { id: 'snapshot_trade', label: 'Snapshot Trade', description: 'Latest trade' },
-          { id: 'snapshot_quote', label: 'Snapshot Quote', description: 'Latest quote' },
-          { id: 'snapshot_market_value', label: 'Snapshot Market Value', description: 'Market cap & value' },
-          { id: 'at_time_trade', label: 'At-Time Trade', description: 'Trade at a specific time of day' },
-          { id: 'at_time_quote', label: 'At-Time Quote', description: 'Quote at a specific time of day' },
-        ]
-      case 'option':
-        return [
-          { id: 'list_expirations', label: 'List Expirations', description: 'All expiration dates for a root' },
-          { id: 'list_strikes', label: 'List Strikes', description: 'All strikes for an expiration' },
-          { id: 'eod', label: 'End-of-Day (EOD)', description: 'Daily OHLCV bars' },
-          { id: 'ohlc', label: 'Intraday OHLC', description: 'Intraday OHLC bars' },
-          { id: 'trade', label: 'Trades', description: 'Every trade tick' },
-          { id: 'quote', label: 'Quotes', description: 'NBBO quotes' },
-          { id: 'greeks_all', label: 'Greeks (All)', description: 'Full Greeks snapshot' },
-          { id: 'greeks_iv', label: 'Implied Volatility', description: 'IV only' },
-          { id: 'open_interest', label: 'Open Interest', description: 'Open interest over time' },
-        ]
-      case 'index':
-        return [
-          { id: 'eod', label: 'End-of-Day (EOD)', description: 'Daily OHLCV' },
-          { id: 'ohlc', label: 'Intraday OHLC', description: 'Intraday bars' },
-          { id: 'price', label: 'Price', description: 'Tick-level index price' },
-        ]
-      case 'calendar':
-        return [
-          { id: 'open_today', label: 'Open Today', description: 'Is the market open right now?' },
-          { id: 'on_date', label: 'On Date', description: 'Market hours for a specific date' },
-          { id: 'year', label: 'Full Year', description: 'All trading days in a year' },
-        ]
-      case 'rate':
-        return [
-          { id: 'eod', label: 'Interest Rate EOD', description: 'Daily risk-free rate' },
-        ]
-    }
-  }
-
-  if (dataMode.value === 'streaming') {
-    switch (assetType.value) {
-      case 'stock':
-        return [
-          { id: 'quote_stream', label: 'Quote Stream', description: 'Live NBBO quotes per symbol' },
-          { id: 'trade_stream', label: 'Trade Stream', description: 'Live trades per symbol' },
-          { id: 'firehose', label: 'Full Trade Firehose', description: 'All stock trades across the market' },
-        ]
-      case 'option':
-        return [
-          { id: 'option_quote_stream', label: 'Quote Stream', description: 'Live quotes per contract' },
-          { id: 'option_trade_stream', label: 'Trade Stream', description: 'Live trades per contract' },
-          { id: 'option_firehose', label: 'Full Trade Firehose', description: 'All option trades across the market' },
-        ]
-      default:
-        return []
-    }
-  }
-
-  return []
-})
-
-// ─── Parameter visibility ─────────────────────────────────────────────────────
-
-const needsSymbol = computed(() => {
-  if (assetType.value === 'calendar') return false
-  if (assetType.value === 'rate') return false
-  if (dataType.value === 'firehose' || dataType.value === 'option_firehose') return false
-  return true
-})
-
-const needsRateSymbol = computed(() => assetType.value === 'rate')
-
-const needsDateRange = computed(() => {
-  const dt = dataType.value
-  if (!dt) return false
-  const dateRangeTypes = ['eod']
-  if (assetType.value === 'index' && dt === 'ohlc') return true
-  if (assetType.value === 'rate') return true
-  if (assetType.value === 'stock' && dt === 'at_time_trade') return true
-  if (assetType.value === 'stock' && dt === 'at_time_quote') return true
-  return dateRangeTypes.includes(dt)
-})
-
-const needsSingleDate = computed(() => {
-  const dt = dataType.value
-  if (!dt) return false
-  const singleDateTypes = ['ohlc', 'trade', 'quote', 'trade_quote', 'greeks_all', 'greeks_iv', 'open_interest']
-  if (assetType.value === 'index' && dt === 'price') return true
-  if (assetType.value === 'calendar' && dt === 'on_date') return true
-  return singleDateTypes.includes(dt)
-})
-
-const needsInterval = computed(() => {
-  const dt = dataType.value
-  if (!dt) return false
-  return ['ohlc', 'quote', 'greeks_all', 'greeks_iv'].includes(dt)
-})
-
-const needsOptionParams = computed(
-  () => assetType.value === 'option' &&
-    !['list_expirations', 'list_strikes'].includes(dataType.value ?? '')
-)
-
-const needsExpiration = computed(
-  () => assetType.value === 'option' &&
-    !['list_expirations'].includes(dataType.value ?? '') &&
-    dataMode.value === 'historical'
-)
-
-const needsOptionContractForStream = computed(
-  () => dataMode.value === 'streaming' &&
-    (dataType.value === 'option_quote_stream' || dataType.value === 'option_trade_stream')
-)
-
-const needsAtTime = computed(
-  () => dataType.value === 'at_time_trade' || dataType.value === 'at_time_quote'
-)
-
-const needsYear = computed(() => dataType.value === 'year')
-
-const isSnapshotMulti = computed(() =>
-  ['snapshot_ohlc', 'snapshot_trade', 'snapshot_quote', 'snapshot_market_value'].includes(dataType.value ?? '')
-)
-
-const intervalOptions = [
-  { label: 'Tick (raw)', value: '0' },
-  { label: '1 minute', value: '60000' },
-  { label: '5 minutes', value: '300000' },
-  { label: '15 minutes', value: '900000' },
-  { label: '30 minutes', value: '1800000' },
-  { label: '1 hour', value: '3600000' },
-]
-
-// ─── Code generation ──────────────────────────────────────────────────────────
-
-function rustContract(sym: string): string {
-  return `Contract::stock("${sym}")`
-}
-
-function pythonOptionParams(): string {
-  const isCall = params.value.right === 'C'
-  return `"${params.value.symbol}", "${params.value.expiration}", ${isCall}, ${params.value.strike}`
-}
-
-function rustOptionContract(): string {
-  const isCall = params.value.right === 'C' ? 'true' : 'false'
-  return `Contract::option("${params.value.symbol}", "${params.value.expiration}", ${isCall}, ${params.value.strike})`
-}
-
-const generatedCode = computed((): string => {
-  if (!dataMode.value || !assetType.value || !dataType.value || !language.value) return ''
-
-  const p = params.value
-  const isRust = language.value === 'rust'
-  const sym = p.symbol.toUpperCase()
-  const rateSym = p.rate_symbol.toUpperCase()
-
-  // ── Streaming ──────────────────────────────────────────────────────────────
-  if (dataMode.value === 'streaming') {
-    if (isRust) {
-      return generateRustStreaming(sym)
-    } else {
-      return generatePythonStreaming(sym)
-    }
-  }
-
-  // ── Historical ─────────────────────────────────────────────────────────────
-  if (isRust) {
-    return generateRustHistorical(sym, rateSym)
+function selectDatePreset(preset: DatePreset) {
+  if (preset.isRange && preset.rangeValue) {
+    const { start, end } = preset.rangeValue()
+    params.value.start_date = start
+    params.value.end_date = end
+    activeDatePreset.value = preset.label
   } else {
-    return generatePythonHistorical(sym, rateSym)
+    params.value.date = preset.value()
+    activeSinglePreset.value = preset.label
   }
-})
-
-function generateRustHistorical(sym: string, rateSym: string): string {
-  const p = params.value
-  const dt = dataType.value!
-  const asset = assetType.value!
-
-  let method = ''
-  let callParams = ''
-  let tickType = ''
-  let printBody = ''
-
-  if (asset === 'stock') {
-    switch (dt) {
-      case 'eod':
-        method = 'stock_history_eod'
-        callParams = `"${sym}", "${p.start_date}", "${p.end_date}"`
-        tickType = 'EodTick'
-        printBody = `"{}: open={} high={} low={} close={} vol={}", tick.date, tick.open_price(), tick.high_price(), tick.low_price(), tick.close_price(), tick.volume`
-        break
-      case 'ohlc':
-        method = 'stock_history_ohlc'
-        callParams = `"${sym}", "${p.date}", ${p.interval}`
-        tickType = 'OhlcTick'
-        printBody = `"{} ms={}: open={} high={} low={} close={} vol={}", tick.date, tick.ms_of_day, tick.open_price(), tick.high_price(), tick.low_price(), tick.close_price(), tick.volume`
-        break
-      case 'trade':
-        method = 'stock_history_trade'
-        callParams = `"${sym}", "${p.date}"`
-        tickType = 'TradeTick'
-        printBody = `"{} ms={}: price={} size={}", tick.date, tick.ms_of_day, tick.price, tick.size`
-        break
-      case 'quote':
-        method = 'stock_history_quote'
-        callParams = `"${sym}", "${p.date}", ${p.interval}`
-        tickType = 'QuoteTick'
-        printBody = `"{} ms={}: bid={} ask={} bid_sz={} ask_sz={}", tick.date, tick.ms_of_day, tick.bid, tick.ask, tick.bid_size, tick.ask_size`
-        break
-      case 'trade_quote':
-        method = 'stock_history_trade_quote'
-        callParams = `"${sym}", "${p.date}"`
-        tickType = 'TradeQuoteTick'
-        printBody = `"{} ms={}: price={} size={} bid={} ask={}", tick.date, tick.ms_of_day, tick.price, tick.size, tick.bid, tick.ask`
-        break
-      case 'snapshot_ohlc':
-        method = 'stock_snapshot_ohlc'
-        callParams = `&["${sym}"]`
-        tickType = 'OhlcTick'
-        printBody = `"{} ms={}: open={} close={}", tick.date, tick.ms_of_day, tick.open_price(), tick.close_price()`
-        break
-      case 'snapshot_trade':
-        method = 'stock_snapshot_trade'
-        callParams = `&["${sym}"]`
-        tickType = 'TradeTick'
-        printBody = `"price={} size={}", tick.price, tick.size`
-        break
-      case 'snapshot_quote':
-        method = 'stock_snapshot_quote'
-        callParams = `&["${sym}"]`
-        tickType = 'QuoteTick'
-        printBody = `"bid={} ask={}", tick.bid, tick.ask`
-        break
-      case 'snapshot_market_value':
-        method = 'stock_snapshot_market_value'
-        callParams = `&["${sym}"]`
-        tickType = 'MarketValueTick'
-        printBody = `"market_cap={}", tick.market_cap`
-        break
-      case 'at_time_trade':
-        method = 'stock_at_time_trade'
-        callParams = `"${sym}", "${p.start_date}", "${p.end_date}", "${p.time}"`
-        tickType = 'TradeTick'
-        printBody = `"{}: price={} size={}", tick.date, tick.price, tick.size`
-        break
-      case 'at_time_quote':
-        method = 'stock_at_time_quote'
-        callParams = `"${sym}", "${p.start_date}", "${p.end_date}", "${p.time}"`
-        tickType = 'QuoteTick'
-        printBody = `"{}: bid={} ask={}", tick.date, tick.bid, tick.ask`
-        break
-    }
-  } else if (asset === 'option') {
-    const isCall = p.right === 'C' ? 'true' : 'false'
-    const baseOptionParams = `"${sym}", "${p.expiration}", ${isCall}, ${p.strike}`
-    switch (dt) {
-      case 'list_expirations':
-        method = 'option_list_expirations'
-        callParams = `"${sym}"`
-        tickType = 'String'
-        printBody = `"{}", exp`
-        return `use thetadatadx::{ThetaDataDx, Credentials, DirectConfig};
-
-#[tokio::main]
-async fn main() -> Result<(), thetadatadx::Error> {
-    let creds = Credentials::from_file("creds.txt")?;
-    let tdx = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
-
-    let expirations = tdx.${method}(${callParams}).await?;
-    for exp in &expirations {
-        println!("${printBody}");
-    }
-    Ok(())
-}`
-          .replace('${method}', method)
-          .replace('${callParams}', callParams)
-          .replace('${printBody}', printBody)
-
-      case 'list_strikes':
-        method = 'option_list_strikes'
-        callParams = `"${sym}", "${p.expiration}"`
-        tickType = 'f64'
-        printBody = `"{}", strike`
-        return `use thetadatadx::{ThetaDataDx, Credentials, DirectConfig};
-
-#[tokio::main]
-async fn main() -> Result<(), thetadatadx::Error> {
-    let creds = Credentials::from_file("creds.txt")?;
-    let tdx = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
-
-    let strikes = tdx.${method}(${callParams}).await?;
-    for strike in &strikes {
-        println!("${printBody}");
-    }
-    Ok(())
-}`
-          .replace('${method}', method)
-          .replace('${callParams}', callParams)
-          .replace('${printBody}', printBody)
-
-      case 'eod':
-        method = 'option_history_eod'
-        callParams = `${baseOptionParams}, "${p.start_date}", "${p.end_date}"`
-        tickType = 'EodTick'
-        printBody = `"{}: open={} high={} low={} close={} vol={}", tick.date, tick.open_price(), tick.high_price(), tick.low_price(), tick.close_price(), tick.volume`
-        break
-      case 'ohlc':
-        method = 'option_history_ohlc'
-        callParams = `${baseOptionParams}, "${p.date}", ${p.interval}`
-        tickType = 'OhlcTick'
-        printBody = `"{} ms={}: open={} close={}", tick.date, tick.ms_of_day, tick.open_price(), tick.close_price()`
-        break
-      case 'trade':
-        method = 'option_history_trade'
-        callParams = `${baseOptionParams}, "${p.date}"`
-        tickType = 'TradeTick'
-        printBody = `"{} ms={}: price={} size={}", tick.date, tick.ms_of_day, tick.price, tick.size`
-        break
-      case 'quote':
-        method = 'option_history_quote'
-        callParams = `${baseOptionParams}, "${p.date}", ${p.interval}`
-        tickType = 'QuoteTick'
-        printBody = `"{} ms={}: bid={} ask={}", tick.date, tick.ms_of_day, tick.bid, tick.ask`
-        break
-      case 'greeks_all':
-        method = 'option_history_greeks_all'
-        callParams = `${baseOptionParams}, "${p.date}", ${p.interval}`
-        tickType = 'GreeksTick'
-        printBody = `"{} ms={}: iv={} delta={} gamma={} theta={} vega={}", tick.date, tick.ms_of_day, tick.implied_volatility, tick.delta, tick.gamma, tick.theta, tick.vega`
-        break
-      case 'greeks_iv':
-        method = 'option_history_greeks_implied_volatility'
-        callParams = `${baseOptionParams}, "${p.date}", ${p.interval}`
-        tickType = 'IvTick'
-        printBody = `"{} ms={}: iv={} iv_err={}", tick.date, tick.ms_of_day, tick.implied_volatility, tick.iv_error`
-        break
-      case 'open_interest':
-        method = 'option_history_open_interest'
-        callParams = `${baseOptionParams}, "${p.date}"`
-        tickType = 'OpenInterestTick'
-        printBody = `"{} ms={}: oi={}", tick.date, tick.ms_of_day, tick.open_interest`
-        break
-    }
-  } else if (asset === 'index') {
-    switch (dt) {
-      case 'eod':
-        method = 'index_history_eod'
-        callParams = `"${sym}", "${p.start_date}", "${p.end_date}"`
-        tickType = 'EodTick'
-        printBody = `"{}: open={} high={} low={} close={} vol={}", tick.date, tick.open_price(), tick.high_price(), tick.low_price(), tick.close_price(), tick.volume`
-        break
-      case 'ohlc':
-        method = 'index_history_ohlc'
-        callParams = `"${sym}", "${p.start_date}", "${p.end_date}", ${p.interval}`
-        tickType = 'OhlcTick'
-        printBody = `"{} ms={}: open={} close={}", tick.date, tick.ms_of_day, tick.open_price(), tick.close_price()`
-        break
-      case 'price':
-        method = 'index_history_price'
-        callParams = `"${sym}", "${p.date}", ${p.interval}`
-        tickType = 'PriceTick'
-        printBody = `"{} ms={}: price={}", tick.date, tick.ms_of_day, tick.price`
-        break
-    }
-  } else if (asset === 'calendar') {
-    switch (dt) {
-      case 'open_today':
-        return `use thetadatadx::{ThetaDataDx, Credentials, DirectConfig};
-
-#[tokio::main]
-async fn main() -> Result<(), thetadatadx::Error> {
-    let creds = Credentials::from_file("creds.txt")?;
-    let tdx = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
-
-    let day = tdx.calendar_open_today().await?;
-    println!("date={} open={} hours={}-{}", day.date, day.is_open, day.open_time, day.close_time);
-    Ok(())
-}`
-      case 'on_date':
-        return `use thetadatadx::{ThetaDataDx, Credentials, DirectConfig};
-
-#[tokio::main]
-async fn main() -> Result<(), thetadatadx::Error> {
-    let creds = Credentials::from_file("creds.txt")?;
-    let tdx = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
-
-    let day = tdx.calendar_on_date("${p.date}").await?;
-    println!("date={} open={} hours={}-{}", day.date, day.is_open, day.open_time, day.close_time);
-    Ok(())
-}`
-      case 'year':
-        return `use thetadatadx::{ThetaDataDx, Credentials, DirectConfig};
-
-#[tokio::main]
-async fn main() -> Result<(), thetadatadx::Error> {
-    let creds = Credentials::from_file("creds.txt")?;
-    let tdx = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
-
-    let days = tdx.calendar_year(${p.year}).await?;
-    for day in &days {
-        println!("date={} open={} hours={}-{}", day.date, day.is_open, day.open_time, day.close_time);
-    }
-    Ok(())
-}`
-    }
-  } else if (asset === 'rate') {
-    return `use thetadatadx::{ThetaDataDx, Credentials, DirectConfig};
-
-#[tokio::main]
-async fn main() -> Result<(), thetadatadx::Error> {
-    let creds = Credentials::from_file("creds.txt")?;
-    let tdx = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
-
-    let ticks = tdx.interest_rate_history_eod("${rateSym}", "${p.start_date}", "${p.end_date}").await?;
-    for tick in &ticks {
-        println!("{}: rate={}", tick.date, tick.rate);
-    }
-    Ok(())
-}`
-  }
-
-  if (!method) return '// No template available for this combination.'
-
-  return `use thetadatadx::{ThetaDataDx, Credentials, DirectConfig};
-
-#[tokio::main]
-async fn main() -> Result<(), thetadatadx::Error> {
-    let creds = Credentials::from_file("creds.txt")?;
-    let tdx = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
-
-    let ticks = tdx.${method}(${callParams}).await?;
-    for tick in &ticks {
-        println!("${printBody}");
-    }
-    Ok(())
-}`
-    .replace('${method}', method)
-    .replace('${callParams}', callParams)
-    .replace('${printBody}', printBody)
 }
 
-function generatePythonHistorical(sym: string, rateSym: string): string {
-  const p = params.value
-  const dt = dataType.value!
-  const asset = assetType.value!
-
-  let method = ''
-  let callParams = ''
-  let printBody = ''
-
-  if (asset === 'stock') {
-    switch (dt) {
-      case 'eod':
-        method = 'stock_history_eod'
-        callParams = `"${sym}", "${p.start_date}", "${p.end_date}"`
-        printBody = `{tick['date']}: open={tick['open']} high={tick['high']} low={tick['low']} close={tick['close']} vol={tick['volume']}`
-        break
-      case 'ohlc':
-        method = 'stock_history_ohlc'
-        callParams = `"${sym}", "${p.date}", ${p.interval}`
-        printBody = `{tick['date']} ms={tick['ms_of_day']}: open={tick['open']} close={tick['close']}`
-        break
-      case 'trade':
-        method = 'stock_history_trade'
-        callParams = `"${sym}", "${p.date}"`
-        printBody = `{tick['date']} ms={tick['ms_of_day']}: price={tick['price']} size={tick['size']}`
-        break
-      case 'quote':
-        method = 'stock_history_quote'
-        callParams = `"${sym}", "${p.date}", ${p.interval}`
-        printBody = `{tick['date']} ms={tick['ms_of_day']}: bid={tick['bid']} ask={tick['ask']}`
-        break
-      case 'trade_quote':
-        method = 'stock_history_trade_quote'
-        callParams = `"${sym}", "${p.date}"`
-        printBody = `{tick['date']} ms={tick['ms_of_day']}: price={tick['price']} bid={tick['bid']} ask={tick['ask']}`
-        break
-      case 'snapshot_ohlc':
-        method = 'stock_snapshot_ohlc'
-        callParams = `["${sym}"]`
-        printBody = `{tick['date']} ms={tick['ms_of_day']}: open={tick['open']} close={tick['close']}`
-        break
-      case 'snapshot_trade':
-        method = 'stock_snapshot_trade'
-        callParams = `["${sym}"]`
-        printBody = `price={tick['price']} size={tick['size']}`
-        break
-      case 'snapshot_quote':
-        method = 'stock_snapshot_quote'
-        callParams = `["${sym}"]`
-        printBody = `bid={tick['bid']} ask={tick['ask']}`
-        break
-      case 'snapshot_market_value':
-        method = 'stock_snapshot_market_value'
-        callParams = `["${sym}"]`
-        printBody = `market_cap={tick['market_cap']}`
-        break
-      case 'at_time_trade':
-        method = 'stock_at_time_trade'
-        callParams = `"${sym}", "${p.start_date}", "${p.end_date}", "${p.time}"`
-        printBody = `{tick['date']}: price={tick['price']} size={tick['size']}`
-        break
-      case 'at_time_quote':
-        method = 'stock_at_time_quote'
-        callParams = `"${sym}", "${p.start_date}", "${p.end_date}", "${p.time}"`
-        printBody = `{tick['date']}: bid={tick['bid']} ask={tick['ask']}`
-        break
-    }
-  } else if (asset === 'option') {
-    const baseOptionParams = `"${sym}", "${p.expiration}", ${p.right === 'C' ? 'True' : 'False'}, ${p.strike}`
-    switch (dt) {
-      case 'list_expirations':
-        return `from thetadatadx import ThetaDataDx, Credentials, Config
-
-creds = Credentials.from_file("creds.txt")
-tdx = ThetaDataDx(creds, Config.production())
-
-expirations = tdx.option_list_expirations("${sym}")
-for exp in expirations:
-    print(exp)`
-
-      case 'list_strikes':
-        return `from thetadatadx import ThetaDataDx, Credentials, Config
-
-creds = Credentials.from_file("creds.txt")
-tdx = ThetaDataDx(creds, Config.production())
-
-strikes = tdx.option_list_strikes("${sym}", "${p.expiration}")
-for strike in strikes:
-    print(strike)`
-
-      case 'eod':
-        method = 'option_history_eod'
-        callParams = `${baseOptionParams}, "${p.start_date}", "${p.end_date}"`
-        printBody = `{tick['date']}: open={tick['open']} close={tick['close']} vol={tick['volume']}`
-        break
-      case 'ohlc':
-        method = 'option_history_ohlc'
-        callParams = `${baseOptionParams}, "${p.date}", ${p.interval}`
-        printBody = `{tick['date']} ms={tick['ms_of_day']}: open={tick['open']} close={tick['close']}`
-        break
-      case 'trade':
-        method = 'option_history_trade'
-        callParams = `${baseOptionParams}, "${p.date}"`
-        printBody = `{tick['date']} ms={tick['ms_of_day']}: price={tick['price']} size={tick['size']}`
-        break
-      case 'quote':
-        method = 'option_history_quote'
-        callParams = `${baseOptionParams}, "${p.date}", ${p.interval}`
-        printBody = `{tick['date']} ms={tick['ms_of_day']}: bid={tick['bid']} ask={tick['ask']}`
-        break
-      case 'greeks_all':
-        method = 'option_history_greeks_all'
-        callParams = `${baseOptionParams}, "${p.date}", ${p.interval}`
-        printBody = `{tick['date']} ms={tick['ms_of_day']}: iv={tick['implied_volatility']} delta={tick['delta']} gamma={tick['gamma']}`
-        break
-      case 'greeks_iv':
-        method = 'option_history_greeks_implied_volatility'
-        callParams = `${baseOptionParams}, "${p.date}", ${p.interval}`
-        printBody = `{tick['date']} ms={tick['ms_of_day']}: iv={tick['implied_volatility']} err={tick['iv_error']}`
-        break
-      case 'open_interest':
-        method = 'option_history_open_interest'
-        callParams = `${baseOptionParams}, "${p.date}"`
-        printBody = `{tick['date']} ms={tick['ms_of_day']}: oi={tick['open_interest']}`
-        break
-    }
-  } else if (asset === 'index') {
-    switch (dt) {
-      case 'eod':
-        method = 'index_history_eod'
-        callParams = `"${sym}", "${p.start_date}", "${p.end_date}"`
-        printBody = `{tick['date']}: open={tick['open']} high={tick['high']} low={tick['low']} close={tick['close']}`
-        break
-      case 'ohlc':
-        method = 'index_history_ohlc'
-        callParams = `"${sym}", "${p.start_date}", "${p.end_date}", ${p.interval}`
-        printBody = `{tick['date']} ms={tick['ms_of_day']}: open={tick['open']} close={tick['close']}`
-        break
-      case 'price':
-        method = 'index_history_price'
-        callParams = `"${sym}", "${p.date}", ${p.interval}`
-        printBody = `{tick['date']} ms={tick['ms_of_day']}: price={tick['price']}`
-        break
-    }
-  } else if (asset === 'calendar') {
-    switch (dt) {
-      case 'open_today':
-        return `from thetadatadx import ThetaDataDx, Credentials, Config
-
-creds = Credentials.from_file("creds.txt")
-tdx = ThetaDataDx(creds, Config.production())
-
-day = tdx.calendar_open_today()
-print(f"{day['date']}: open={day['is_open']} hours={day['open_time']}-{day['close_time']}")`
-
-      case 'on_date':
-        return `from thetadatadx import ThetaDataDx, Credentials, Config
-
-creds = Credentials.from_file("creds.txt")
-tdx = ThetaDataDx(creds, Config.production())
-
-day = tdx.calendar_on_date("${p.date}")
-print(f"{day['date']}: open={day['is_open']} hours={day['open_time']}-{day['close_time']}")`
-
-      case 'year':
-        return `from thetadatadx import ThetaDataDx, Credentials, Config
-
-creds = Credentials.from_file("creds.txt")
-tdx = ThetaDataDx(creds, Config.production())
-
-days = tdx.calendar_year(${p.year})
-for day in days:
-    print(f"{day['date']}: open={day['is_open']}")`
-    }
-  } else if (asset === 'rate') {
-    return `from thetadatadx import ThetaDataDx, Credentials, Config
-
-creds = Credentials.from_file("creds.txt")
-tdx = ThetaDataDx(creds, Config.production())
-
-ticks = tdx.interest_rate_history_eod("${rateSym}", "${p.start_date}", "${p.end_date}")
-for tick in ticks:
-    print(f"{tick['date']}: rate={tick['rate']}")`
-  }
-
-  if (!method) return '# No template available for this combination.'
-
-  return `from thetadatadx import ThetaDataDx, Credentials, Config
-
-creds = Credentials.from_file("creds.txt")
-tdx = ThetaDataDx(creds, Config.production())
-
-ticks = tdx.${method}(${callParams})
-for tick in ticks:
-    print(f"${printBody}")`
-    .replace('${method}', method)
-    .replace('${callParams}', callParams)
-    .replace('${printBody}', printBody)
+function selectSymbol(s: SymbolSuggestion) {
+  params.value.symbol = s.symbol
+  symbolInput.value = s.symbol
+  autocompleteVisible.value = false
+  acSelectedIdx.value = -1
 }
 
-function generateRustStreaming(sym: string): string {
-  const p = params.value
-  const dt = dataType.value!
-
-  switch (dt) {
-    case 'quote_stream':
-      return `use thetadatadx::{ThetaDataDx, Credentials, DirectConfig};
-use thetadatadx::fpss::{FpssEvent, FpssData};
-use thetadatadx::fpss::protocol::Contract;
-
-#[tokio::main]
-async fn main() -> Result<(), thetadatadx::Error> {
-    let creds = Credentials::from_file("creds.txt")?;
-    let tdx = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
-
-    tdx.start_streaming(|event: &FpssEvent| {
-        match event {
-            FpssEvent::Data(FpssData::Quote { bid, ask, bid_size, ask_size, ms_of_day, date, .. }) => {
-                println!("{} ms={}: bid={} ask={} bid_sz={} ask_sz={}", date, ms_of_day, bid, ask, bid_size, ask_size);
-            }
-            _ => {}
-        }
-    })?;
-
-    tdx.subscribe_quotes(&Contract::stock("${sym}"))?;
-
-    // Keep alive
-    std::thread::park();
-    Ok(())
-}`
-
-    case 'trade_stream':
-      return `use thetadatadx::{ThetaDataDx, Credentials, DirectConfig};
-use thetadatadx::fpss::{FpssEvent, FpssData};
-use thetadatadx::fpss::protocol::Contract;
-
-#[tokio::main]
-async fn main() -> Result<(), thetadatadx::Error> {
-    let creds = Credentials::from_file("creds.txt")?;
-    let tdx = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
-
-    tdx.start_streaming(|event: &FpssEvent| {
-        match event {
-            FpssEvent::Data(FpssData::Trade { price, size, ms_of_day, date, .. }) => {
-                println!("{} ms={}: price={} size={}", date, ms_of_day, price, size);
-            }
-            _ => {}
-        }
-    })?;
-
-    tdx.subscribe_trades(&Contract::stock("${sym}"))?;
-
-    // Keep alive
-    std::thread::park();
-    Ok(())
-}`
-
-    case 'firehose':
-      return `use thetadatadx::{ThetaDataDx, Credentials, DirectConfig};
-use thetadatadx::fpss::{FpssEvent, FpssData, SecType};
-
-#[tokio::main]
-async fn main() -> Result<(), thetadatadx::Error> {
-    let creds = Credentials::from_file("creds.txt")?;
-    let tdx = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
-
-    tdx.start_streaming(|event: &FpssEvent| {
-        match event {
-            FpssEvent::Data(FpssData::Trade { price, size, ms_of_day, date, .. }) => {
-                println!("{} ms={}: price={} size={}", date, ms_of_day, price, size);
-            }
-            _ => {}
-        }
-    })?;
-
-    tdx.subscribe_full_trades(SecType::Stock)?;
-
-    // Keep alive
-    std::thread::park();
-    Ok(())
-}`
-
-    case 'option_quote_stream': {
-      const isCall = p.right === 'C' ? 'true' : 'false'
-      return `use thetadatadx::{ThetaDataDx, Credentials, DirectConfig};
-use thetadatadx::fpss::{FpssEvent, FpssData};
-use thetadatadx::fpss::protocol::Contract;
-
-#[tokio::main]
-async fn main() -> Result<(), thetadatadx::Error> {
-    let creds = Credentials::from_file("creds.txt")?;
-    let tdx = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
-
-    tdx.start_streaming(|event: &FpssEvent| {
-        match event {
-            FpssEvent::Data(FpssData::Quote { bid, ask, bid_size, ask_size, ms_of_day, date, .. }) => {
-                println!("{} ms={}: bid={} ask={} bid_sz={} ask_sz={}", date, ms_of_day, bid, ask, bid_size, ask_size);
-            }
-            _ => {}
-        }
-    })?;
-
-    tdx.subscribe_quotes(&Contract::option("${p.symbol.toUpperCase()}", "${p.expiration}", ${isCall}, ${p.strike}))?;
-
-    // Keep alive
-    std::thread::park();
-    Ok(())
-}`
-    }
-
-    case 'option_trade_stream': {
-      const isCall = p.right === 'C' ? 'true' : 'false'
-      return `use thetadatadx::{ThetaDataDx, Credentials, DirectConfig};
-use thetadatadx::fpss::{FpssEvent, FpssData};
-use thetadatadx::fpss::protocol::Contract;
-
-#[tokio::main]
-async fn main() -> Result<(), thetadatadx::Error> {
-    let creds = Credentials::from_file("creds.txt")?;
-    let tdx = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
-
-    tdx.start_streaming(|event: &FpssEvent| {
-        match event {
-            FpssEvent::Data(FpssData::Trade { price, size, ms_of_day, date, .. }) => {
-                println!("{} ms={}: price={} size={}", date, ms_of_day, price, size);
-            }
-            _ => {}
-        }
-    })?;
-
-    tdx.subscribe_trades(&Contract::option("${p.symbol.toUpperCase()}", "${p.expiration}", ${isCall}, ${p.strike}))?;
-
-    // Keep alive
-    std::thread::park();
-    Ok(())
-}`
-    }
-
-    case 'option_firehose':
-      return `use thetadatadx::{ThetaDataDx, Credentials, DirectConfig};
-use thetadatadx::fpss::{FpssEvent, FpssData, SecType};
-
-#[tokio::main]
-async fn main() -> Result<(), thetadatadx::Error> {
-    let creds = Credentials::from_file("creds.txt")?;
-    let tdx = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
-
-    tdx.start_streaming(|event: &FpssEvent| {
-        match event {
-            FpssEvent::Data(FpssData::Trade { price, size, ms_of_day, date, .. }) => {
-                println!("{} ms={}: price={} size={}", date, ms_of_day, price, size);
-            }
-            _ => {}
-        }
-    })?;
-
-    tdx.subscribe_full_trades(SecType::Option)?;
-
-    // Keep alive
-    std::thread::park();
-    Ok(())
-}`
-  }
-
-  return '// No template available for this combination.'
+function onSymbolInput() {
+  params.value.symbol = symbolInput.value.toUpperCase()
+  autocompleteVisible.value = true
+  acSelectedIdx.value = -1
 }
 
-function generatePythonStreaming(sym: string): string {
-  const p = params.value
-  const dt = dataType.value!
-
-  switch (dt) {
-    case 'quote_stream':
-      return `from thetadatadx import ThetaDataDx, Credentials, Config
-
-creds = Credentials.from_file("creds.txt")
-tdx = ThetaDataDx(creds, Config.production())
-
-tdx.start_streaming()
-tdx.subscribe_quotes("${sym}")
-
-while True:
-    event = tdx.next_event(timeout_ms=5000)
-    if event is None:
-        continue
-    if event["kind"] == "Quote":
-        print(f"{event['date']} ms={event['ms_of_day']}: bid={event['bid']} ask={event['ask']}")
-
-tdx.stop_streaming()`
-
-    case 'trade_stream':
-      return `from thetadatadx import ThetaDataDx, Credentials, Config
-
-creds = Credentials.from_file("creds.txt")
-tdx = ThetaDataDx(creds, Config.production())
-
-tdx.start_streaming()
-tdx.subscribe_trades("${sym}")
-
-while True:
-    event = tdx.next_event(timeout_ms=5000)
-    if event is None:
-        continue
-    if event["kind"] == "Trade":
-        print(f"{event['date']} ms={event['ms_of_day']}: price={event['price']} size={event['size']}")
-
-tdx.stop_streaming()`
-
-    case 'firehose':
-      return `from thetadatadx import ThetaDataDx, Credentials, Config
-
-creds = Credentials.from_file("creds.txt")
-tdx = ThetaDataDx(creds, Config.production())
-
-tdx.start_streaming()
-tdx.subscribe_full_trades("STOCK")
-
-while True:
-    event = tdx.next_event(timeout_ms=5000)
-    if event is None:
-        continue
-    if event["kind"] == "Trade":
-        print(f"{event['date']} ms={event['ms_of_day']}: price={event['price']} size={event['size']}")
-
-tdx.stop_streaming()`
-
-    case 'option_quote_stream':
-      return `from thetadatadx import ThetaDataDx, Credentials, Config
-
-creds = Credentials.from_file("creds.txt")
-tdx = ThetaDataDx(creds, Config.production())
-
-tdx.start_streaming()
-tdx.subscribe_option_quotes("${p.symbol.toUpperCase()}", "${p.expiration}", ${p.right === 'C' ? 'True' : 'False'}, ${p.strike})
-
-while True:
-    event = tdx.next_event(timeout_ms=5000)
-    if event is None:
-        continue
-    if event["kind"] == "Quote":
-        print(f"{event['date']} ms={event['ms_of_day']}: bid={event['bid']} ask={event['ask']}")
-
-tdx.stop_streaming()`
-
-    case 'option_trade_stream':
-      return `from thetadatadx import ThetaDataDx, Credentials, Config
-
-creds = Credentials.from_file("creds.txt")
-tdx = ThetaDataDx(creds, Config.production())
-
-tdx.start_streaming()
-tdx.subscribe_option_trades("${p.symbol.toUpperCase()}", "${p.expiration}", ${p.right === 'C' ? 'True' : 'False'}, ${p.strike})
-
-while True:
-    event = tdx.next_event(timeout_ms=5000)
-    if event is None:
-        continue
-    if event["kind"] == "Trade":
-        print(f"{event['date']} ms={event['ms_of_day']}: price={event['price']} size={event['size']}")
-
-tdx.stop_streaming()`
-
-    case 'option_firehose':
-      return `from thetadatadx import ThetaDataDx, Credentials, Config
-
-creds = Credentials.from_file("creds.txt")
-tdx = ThetaDataDx(creds, Config.production())
-
-tdx.start_streaming()
-tdx.subscribe_full_trades("OPTION")
-
-while True:
-    event = tdx.next_event(timeout_ms=5000)
-    if event is None:
-        continue
-    if event["kind"] == "Trade":
-        print(f"{event['date']} ms={event['ms_of_day']}: price={event['price']} size={event['size']}")
-
-tdx.stop_streaming()`
-  }
-
-  return '# No template available for this combination.'
+function onSymbolFocus() {
+  symbolInputFocused.value = true
+  autocompleteVisible.value = true
 }
 
-// ─── Code language label ──────────────────────────────────────────────────────
+function onSymbolBlur() {
+  // Delay to allow click on suggestion
+  setTimeout(() => {
+    autocompleteVisible.value = false
+    symbolInputFocused.value = false
+  }, 150)
+}
 
-const codeLanguageLabel = computed(() =>
-  language.value === 'rust' ? 'rust' : 'python'
-)
-
-// ─── Copy to clipboard ───────────────────────────────────────────────────────
+function onSymbolKeydown(e: KeyboardEvent) {
+  const flat = filteredSuggestions.value
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    acSelectedIdx.value = Math.min(acSelectedIdx.value + 1, flat.length - 1)
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    acSelectedIdx.value = Math.max(acSelectedIdx.value - 1, -1)
+  } else if (e.key === 'Enter' && acSelectedIdx.value >= 0) {
+    e.preventDefault()
+    selectSymbol(flat[acSelectedIdx.value])
+  } else if (e.key === 'Escape') {
+    autocompleteVisible.value = false
+  }
+}
 
 async function copyCode() {
   if (!generatedCode.value) return
@@ -1038,952 +455,1779 @@ async function copyCode() {
     setTimeout(() => { copied.value = false }, 2000)
   } catch {
     // fallback
-    const el = document.createElement('textarea')
-    el.value = generatedCode.value
-    document.body.appendChild(el)
-    el.select()
+    const ta = document.createElement('textarea')
+    ta.value = generatedCode.value
+    document.body.appendChild(ta)
+    ta.select()
     document.execCommand('copy')
-    document.body.removeChild(el)
+    document.body.removeChild(ta)
     copied.value = true
     setTimeout(() => { copied.value = false }, 2000)
   }
 }
 
-// ─── Reset ───────────────────────────────────────────────────────────────────
+// ─── Init ─────────────────────────────────────────────────────────────────────
 
-function reset() {
-  dataMode.value = null
-  assetType.value = null
-  dataType.value = null
-  language.value = null
-  step.value = 1
+onMounted(() => {
+  if (typeof localStorage !== 'undefined') {
+    const saved = localStorage.getItem('qb-lang')
+    if (saved === 'python' || saved === 'rust') language.value = saved
+  }
+  symbolInput.value = params.value.symbol
+})
+
+// ─── Syntax highlighting (regex-based) ───────────────────────────────────────
+
+function highlight(code: string, lang: 'python' | 'rust'): string {
+  // Escape HTML first
+  let s = code
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+
+  if (lang === 'python') {
+    // Strings (double and single quoted) — process before keywords
+    s = s.replace(/("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g,
+      '<span class="hl-string">$1</span>')
+    // Comments
+    s = s.replace(/(#[^\n]*)/g, '<span class="hl-comment">$1</span>')
+    // Keywords
+    s = s.replace(/\b(from|import|def|class|return|for|in|if|else|elif|while|True|False|None|and|or|not|with|as|try|except|finally|lambda|yield|pass|break|continue|async|await|raise|del|global|nonlocal|assert)\b/g,
+      '<span class="hl-keyword">$1</span>')
+    // Built-ins / types
+    s = s.replace(/\b(print|len|range|str|int|float|list|dict|set|tuple|bool|type|isinstance|enumerate|zip|map|filter|sorted|reversed|sum|min|max|abs|round|open|super)\b/g,
+      '<span class="hl-builtin">$1</span>')
+    // Decorators
+    s = s.replace(/(@\w+)/g, '<span class="hl-decorator">$1</span>')
+    // Numbers
+    s = s.replace(/\b(\d+\.?\d*)\b/g, '<span class="hl-number">$1</span>')
+    // Function calls
+    s = s.replace(/\b([a-zA-Z_]\w*)(?=\()/g, '<span class="hl-func">$1</span>')
+  } else {
+    // Rust
+    // Strings
+    s = s.replace(/(r?"(?:[^"\\]|\\.)*")/g, '<span class="hl-string">$1</span>')
+    // Comments
+    s = s.replace(/(\/\/[^\n]*)/g, '<span class="hl-comment">$1</span>')
+    // Keywords
+    s = s.replace(/\b(use|fn|let|mut|pub|struct|enum|impl|trait|for|in|if|else|while|loop|match|return|async|await|move|ref|type|where|const|static|mod|crate|self|Self|super|as|break|continue|unsafe|extern|dyn|box|true|false)\b/g,
+      '<span class="hl-keyword">$1</span>')
+    // Types
+    s = s.replace(/\b(String|Vec|HashMap|Option|Result|Box|Arc|Mutex|i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64|bool|usize|isize|str)\b/g,
+      '<span class="hl-type">$1</span>')
+    // Macros
+    s = s.replace(/\b(\w+!)/g, '<span class="hl-macro">$1</span>')
+    // Numbers
+    s = s.replace(/\b(\d+\.?\d*(?:_\d+)*(?:u\d+|i\d+|f\d+)?)\b/g, '<span class="hl-number">$1</span>')
+    // Attributes
+    s = s.replace(/(#\[.*?\])/g, '<span class="hl-decorator">$1</span>')
+    // Function calls
+    s = s.replace(/\b([a-zA-Z_]\w*)(?=\()/g, '<span class="hl-func">$1</span>')
+  }
+
+  return s
 }
 
-// ─── Breadcrumb helpers ───────────────────────────────────────────────────────
+const highlightedCode = computed(() => highlight(generatedCode.value, language.value))
 
-const dataModeLabel = computed(() => {
-  if (dataMode.value === 'historical') return 'Historical'
-  if (dataMode.value === 'streaming') return 'Real-Time'
-  return null
-})
+// ─── Code generators ─────────────────────────────────────────────────────────
 
-const assetLabel = computed(() => {
-  const map: Record<AssetType, string> = {
-    stock: 'Stock',
-    option: 'Option',
-    index: 'Index',
-    calendar: 'Calendar',
-    rate: 'Interest Rate',
+function sym(): string { return params.value.symbol.toUpperCase() }
+function exp(): string { return params.value.expiration }
+function strike(): string { return params.value.strike }
+function right(): string { return params.value.right }
+function interval(): string { return params.value.interval }
+function startDate(): string { return params.value.start_date }
+function endDate(): string { return params.value.end_date }
+function singleDate(): string { return params.value.date }
+function minSize(): string { return params.value.min_size }
+function yearVal(): string { return params.value.year }
+function symsListPy(): string {
+  return symbolsList.value.map(s => `"${s}"`).join(', ')
+}
+function symsListRust(): string {
+  return symbolsList.value.map(s => `"${s}"`).join(', ')
+}
+
+function pyHeader(): string {
+  return `from thetadatadx import ThetaDataDx, Credentials, Config
+
+creds = Credentials.from_file("creds.txt")
+tdx = ThetaDataDx(creds, Config.production())`
+}
+
+function rustHeader(): string {
+  return `use thetadatadx::{ThetaDataDx, Credentials, DirectConfig};`
+}
+
+function rustMain(body: string): string {
+  return `${rustHeader()}
+
+#[tokio::main]
+async fn main() -> Result<(), thetadatadx::Error> {
+    let creds = Credentials::from_file("creds.txt")?;
+    let tdx = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
+
+${body}
+    Ok(())
+}`
+}
+
+function genPython(): string {
+  const id = currentRecipe.value!.id
+  const h = pyHeader()
+
+  switch (id) {
+    case 'stock_price_history': return `${h}
+
+symbol = "${sym()}"
+
+# EOD bars (date range)
+eod = tdx.stock_history_eod(symbol, "${startDate()}", "${endDate()}")
+for tick in eod:
+    print(f"{tick['date']}: open={tick['open']} high={tick['high']} low={tick['low']} close={tick['close']} vol={tick['volume']}")
+
+# Intraday OHLC (interval: ${interval()} ms)
+ohlc = tdx.stock_history_ohlc(symbol, "${endDate()}", ${interval()})
+for tick in ohlc:
+    print(f"{tick['date']} ms={tick['ms_of_day']}: open={tick['open']} close={tick['close']} vol={tick['volume']}")`
+
+    case 'option_chain_snapshot': return `${h}
+
+symbol = "${sym()}"
+exp    = "${exp()}"
+
+# Get all strikes for this expiration
+strikes = tdx.option_list_strikes(symbol, exp)
+print(f"Found {len(strikes)} strikes for {symbol} {exp}")
+
+# Fetch Greeks for each strike (calls + puts)
+chain = []
+for strike in strikes:
+    for right in ["C", "P"]:
+        greeks = tdx.option_snapshot_greeks_all(symbol, exp, strike, right)
+        if greeks:
+            chain.append({
+                "strike": int(strike) / 1000,  # scaled int -> dollars
+                "right":  right,
+                **greeks[0],
+            })
+
+from thetadatadx import to_dataframe
+df = to_dataframe(chain)
+print(df[["strike", "right", "implied_volatility", "delta", "gamma", "theta", "vega"]].to_string())`
+
+    case 'gamma_exposure': return `${h}
+
+symbol = "${sym()}"
+exp    = "${exp()}"
+
+strikes  = tdx.option_list_strikes(symbol, exp)
+
+gex_data = []
+for strike in strikes:
+    for right in ["C", "P"]:
+        greeks = tdx.option_snapshot_greeks_all(symbol, exp, strike, right)
+        oi     = tdx.option_snapshot_open_interest(symbol, exp, strike, right)
+        if greeks and oi:
+            gamma        = greeks[0]["gamma"]
+            open_interest = oi[0]["open_interest"]
+            # GEX = gamma * OI * 100 * spot^2 / 10^7
+            # Calls add positive gamma, puts subtract (dealers are short puts)
+            sign = 1 if right == "C" else -1
+            gex_data.append({
+                "strike": int(strike) / 1000,  # scaled int -> dollars
+                "right":  right,
+                "gamma":  gamma,
+                "oi":     open_interest,
+                "gex":    sign * gamma * open_interest * 100,
+            })
+
+from thetadatadx import to_dataframe
+df = to_dataframe(gex_data)
+print(df.sort_values("strike").to_string())
+print(f"\\nNet GEX: {df['gex'].sum():.2f}")`
+
+    case 'vol_surface': return `${h}
+
+symbol = "${sym()}"
+
+# Get all available expirations
+exps = tdx.option_list_expirations(symbol)
+print(f"Found {len(exps)} expirations")
+
+surface = []
+for exp in exps[:8]:  # first 8 expirations for a manageable surface
+    strikes = tdx.option_list_strikes(symbol, exp)
+    for strike in strikes:
+        iv_data = tdx.option_snapshot_greeks_implied_volatility(symbol, exp, strike, "C")
+        if iv_data and iv_data[0]["implied_volatility"] > 0:
+            surface.append({
+                "expiration": exp,
+                "strike":     int(strike) / 1000,  # scaled int -> dollars
+                "iv":         iv_data[0]["implied_volatility"],
+            })
+
+from thetadatadx import to_dataframe
+df    = to_dataframe(surface)
+pivot = df.pivot(index="strike", columns="expiration", values="iv")
+print(pivot.to_string())`
+
+    case 'unusual_activity': return `${h}
+
+symbol = "${sym()}"
+date   = "${singleDate()}"
+
+# Get all option contracts that traded on this date
+contracts = tdx.option_list_contracts("EOD", symbol, date)
+print(f"Scanning {len(contracts)} contracts...")
+
+unusual = []
+for c in contracts:
+    exp_c   = c["expiration"]
+    strike_c = c["strike"]
+    right_c  = c["right"]
+
+    oi_data = tdx.option_history_open_interest(symbol, str(exp_c), str(strike_c), right_c, date)
+    trades  = tdx.option_history_trade(symbol, str(exp_c), str(strike_c), right_c, date)
+
+    if oi_data and trades:
+        total_volume = len(trades)
+        open_int     = oi_data[0]["open_interest"] if oi_data[0]["open_interest"] > 0 else 1
+        vol_oi       = total_volume / open_int
+
+        if vol_oi > 2.0:  # volume > 2x open interest = unusual
+            unusual.append({
+                "contract":     f"{symbol} {exp_c} {right_c} {int(strike_c)/1000}",
+                "volume":       total_volume,
+                "oi":           open_int,
+                "vol_oi_ratio": round(vol_oi, 2),
+            })
+
+from thetadatadx import to_dataframe
+df = to_dataframe(unusual)
+if df.empty:
+    print("No unusual activity found.")
+else:
+    print(df.sort_values("vol_oi_ratio", ascending=False).head(20).to_string())`
+
+    case 'put_call_ratio': return `${h}
+
+symbol = "${sym()}"
+exp    = "${exp()}"
+
+strikes = tdx.option_list_strikes(symbol, exp)
+
+total_call_vol = 0
+total_put_vol  = 0
+total_call_oi  = 0
+total_put_oi   = 0
+
+for strike in strikes:
+    for right in ["C", "P"]:
+        snap = tdx.option_snapshot_trade(symbol, exp, strike, right)
+        oi   = tdx.option_snapshot_open_interest(symbol, exp, strike, right)
+
+        if snap:
+            if right == "C":
+                total_call_vol += snap[0].get("volume", 0)
+            else:
+                total_put_vol  += snap[0].get("volume", 0)
+
+        if oi:
+            if right == "C":
+                total_call_oi += oi[0].get("open_interest", 0)
+            else:
+                total_put_oi  += oi[0].get("open_interest", 0)
+
+call_vol = total_call_vol if total_call_vol > 0 else 1
+call_oi  = total_call_oi  if total_call_oi  > 0 else 1
+
+print(f"  Call volume : {total_call_vol:>10,}")
+print(f"  Put  volume : {total_put_vol:>10,}")
+print(f"  P/C vol ratio: {total_put_vol / call_vol:.4f}")
+print()
+print(f"  Call OI     : {total_call_oi:>10,}")
+print(f"  Put  OI     : {total_put_oi:>10,}")
+print(f"  P/C OI ratio: {total_put_oi / call_oi:.4f}")`
+
+    case 'historical_greeks': return `${h}
+
+symbol = "${sym()}"
+exp    = "${exp()}"
+# Strike uses scaled integers: 500000 = $500.00
+strike = "${strike()}"
+right  = "${right()}"  # "C" for call, "P" for put
+
+# Fetch historical Greeks at ${interval()} ms interval
+ticks = tdx.option_history_greeks_all(symbol, exp, strike, right, "${singleDate()}", ${interval()})
+for tick in ticks:
+    print(
+        f"{tick['date']} ms={tick['ms_of_day']:>8}: "
+        f"iv={tick['implied_volatility']:.4f}  "
+        f"delta={tick['delta']:+.4f}  "
+        f"gamma={tick['gamma']:.6f}  "
+        f"theta={tick['theta']:+.4f}  "
+        f"vega={tick['vega']:.4f}"
+    )
+
+print(f"\\nTotal ticks: {len(ticks)}")`
+
+    case 'volume_profile': return `${h}
+
+symbol = "${sym()}"
+
+# Fetch all trades over the date range
+from collections import defaultdict
+price_buckets: dict = defaultdict(int)
+
+# Get each day's trades and aggregate by price bucket
+from datetime import date, timedelta
+
+start = "${startDate()}"
+end   = "${endDate()}"
+
+# Build list of trading dates
+exps = []
+current = date(int(start[:4]), int(start[4:6]), int(start[6:]))
+end_dt  = date(int(end[:4]),   int(end[4:6]),   int(end[6:]))
+
+while current <= end_dt:
+    if current.weekday() < 5:  # Monday-Friday
+        exps.append(current.strftime("%Y%m%d"))
+    current += timedelta(days=1)
+
+for trading_date in exps:
+    trades = tdx.stock_history_trade(symbol, trading_date)
+    for t in trades:
+        # Round price to nearest $0.25 bucket
+        bucket = round(t["price"] * 4) / 4
+        price_buckets[bucket] += t["size"]
+
+# Sort and display
+sorted_profile = sorted(price_buckets.items())
+max_vol = max(v for _, v in sorted_profile) if sorted_profile else 1
+print(f"Volume Profile for {symbol} ({start} - {end}):")
+print(f"{'Price':>10}  {'Volume':>12}  {'Bar'}")
+print("-" * 50)
+for price, vol in sorted_profile:
+    bar_len = int(vol / max_vol * 40)
+    bar = "#" * bar_len
+    print(f"\${price:>9.2f}  {vol:>12,}  {bar}")`
+
+    case 'market_calendar': return `${h}
+
+# Get all trading days, holidays, and early closes for ${yearVal()}
+days = tdx.calendar_year(${yearVal()})
+
+trading_days = [d for d in days if d["is_open"]]
+holidays     = [d for d in days if not d["is_open"]]
+early_closes = [d for d in trading_days if d.get("early_close")]
+
+print(f"Year ${yearVal()} Summary:")
+print(f"  Trading days : {len(trading_days)}")
+print(f"  Holidays     : {len(holidays)}")
+print(f"  Early closes : {len(early_closes)}")
+print()
+print("Holidays:")
+for d in holidays:
+    print(f"  {d['date']}")
+print()
+print("Early Closes:")
+for d in early_closes:
+    print(f"  {d['date']}  closes={d.get('close_time', '?')}")`
+
+    case 'live_quote_monitor': return `${h}
+
+tdx.start_streaming()
+
+# Subscribe to multiple symbols
+symbols = [${symsListPy()}]
+for sym in symbols:
+    tdx.subscribe_quotes(sym)
+
+print(f"Monitoring quotes for: {symbols}")
+print(f"{'Symbol':<8}  {'Bid':>8}  {'Ask':>8}  {'Spread':>8}  {'Mid':>8}")
+print("-" * 50)
+
+contracts = {}
+while True:
+    event = tdx.next_event(timeout_ms=5000)
+    if event is None:
+        continue
+    if event["kind"] == "contract_assigned":
+        contracts[event["id"]] = event["detail"]
+    elif event["kind"] == "quote":
+        name   = contracts.get(event.get("contract_id"), "?")
+        bid    = event["bid"]
+        ask    = event["ask"]
+        spread = ask - bid
+        mid    = (bid + ask) / 2
+        print(f"\\r{name:<8}  {bid:>8.2f}  {ask:>8.2f}  {spread:>8.4f}  {mid:>8.2f}", end="", flush=True)`
+
+    case 'trade_tape': return `${h}
+
+tdx.start_streaming()
+
+# Subscribe to trade stream for each symbol
+symbols = [${symsListPy()}]
+for sym in symbols:
+    tdx.subscribe_trades(sym)
+
+print(f"Trade tape for: {symbols}")
+print(f"{'Time':>12}  {'Symbol':<8}  {'Price':>8}  {'Size':>8}  {'Cond'}")
+print("-" * 55)
+
+contracts = {}
+while True:
+    event = tdx.next_event(timeout_ms=5000)
+    if event is None:
+        continue
+    if event["kind"] == "contract_assigned":
+        contracts[event["id"]] = event["detail"]
+    elif event["kind"] == "trade":
+        name  = contracts.get(event.get("contract_id"), "?")
+        price = event["price"]
+        size  = event["size"]
+        ms    = event.get("ms_of_day", 0)
+        h, remainder = divmod(ms, 3600000)
+        m, s_ms      = divmod(remainder, 60000)
+        s            = s_ms // 1000
+        time_str     = f"{h:02d}:{m:02d}:{s:02d}"
+        cond         = event.get("condition", "")
+        print(f"{time_str:>12}  {name:<8}  {price:>8.2f}  {size:>8,}  {cond}")`
+
+    case 'option_flow_scanner': return `${h}
+
+tdx.start_streaming()
+tdx.subscribe_full_trades("OPTION")
+
+print(f"Option Flow Scanner — alerting on size >= ${minSize()}")
+print(f"{'Contract':<35}  {'Size':>6}  {'Price':>8}  {'Premium':>12}  {'Side'}")
+print("-" * 80)
+
+contracts = {}
+while True:
+    event = tdx.next_event(timeout_ms=5000)
+    if event is None:
+        continue
+    if event["kind"] == "contract_assigned":
+        contracts[event["id"]] = event["detail"]
+    elif event["kind"] == "trade":
+        contract = contracts.get(event.get("contract_id"), "?")
+        size     = event["size"]
+        price    = event["price"]
+
+        if size >= ${minSize()}:
+            premium   = price * size * 100
+            # Classify aggressor side by bid/ask proximity
+            bid = event.get("bid", 0)
+            ask = event.get("ask", 0)
+            mid = (bid + ask) / 2 if bid and ask else price
+            side = "BUY" if price >= mid else "SELL"
+
+            print(f"{contract:<35}  {size:>6,}  {price:>8.2f}  \${premium:>11,.0f}  {side}")`
+
+    case 'live_option_chain': return `${h}
+
+tdx.start_streaming()
+
+symbol = "${sym()}"
+exp    = "${exp()}"
+
+# Get all strikes, then subscribe to each contract
+strikes = tdx.option_list_strikes(symbol, exp)
+for strike in strikes:
+    for right in ["C", "P"]:
+        tdx.subscribe_greeks(symbol, exp, strike, right)
+
+print(f"Live chain: {symbol} {exp}  ({len(strikes) * 2} contracts)")
+print(f"{'Contract':<30}  {'IV':>7}  {'Delta':>7}  {'Gamma':>9}  {'Theta':>7}  {'Vega':>7}")
+print("-" * 80)
+
+chain_state: dict = {}
+contracts = {}
+while True:
+    event = tdx.next_event(timeout_ms=5000)
+    if event is None:
+        continue
+    if event["kind"] == "contract_assigned":
+        contracts[event["id"]] = event["detail"]
+    elif event["kind"] == "greeks":
+        name = contracts.get(event.get("contract_id"), "?")
+        chain_state[name] = event
+        # Reprint sorted by strike
+        print("\\033[H\\033[J", end="")  # clear screen
+        for k, v in sorted(chain_state.items()):
+            print(
+                f"{k:<30}  {v['implied_volatility']:>7.4f}  "
+                f"{v['delta']:>+7.4f}  {v['gamma']:>9.6f}  "
+                f"{v['theta']:>+7.4f}  {v['vega']:>7.4f}"
+            )`
+
+    default:
+      return '# Recipe not yet implemented'
   }
-  return assetType.value ? map[assetType.value] : null
-})
+}
 
-const dataTypeLabel = computed(() => {
-  return dataTypeOptions.value.find(o => o.id === dataType.value)?.label ?? null
-})
+function genRust(): string {
+  const id = currentRecipe.value!.id
+  const h = rustHeader()
 
-const languageLabel = computed(() => {
-  if (language.value === 'rust') return 'Rust'
-  if (language.value === 'python') return 'Python'
-  return null
-})
+  switch (id) {
+    case 'stock_price_history': return rustMain(`    let symbol = "${sym()}";
+
+    // EOD bars (date range)
+    let eod = tdx.stock_history_eod(symbol, "${startDate()}", "${endDate()}").await?;
+    println!("EOD bars: {} records", eod.len());
+    for tick in &eod {
+        println!("{}: open={} high={} low={} close={} vol={}",
+            tick.date, tick.open_price(), tick.high_price(),
+            tick.low_price(), tick.close_price(), tick.volume);
+    }
+
+    // Intraday OHLC (interval: ${interval()} ms)
+    let ohlc = tdx.stock_history_ohlc(symbol, "${endDate()}", ${interval()}).await?;
+    for tick in &ohlc {
+        println!("{} ms={}: open={} close={} vol={}",
+            tick.date, tick.ms_of_day, tick.open_price(), tick.close_price(), tick.volume);
+    }`)
+
+    case 'option_chain_snapshot': return rustMain(`    let symbol = "${sym()}";
+    let exp    = "${exp()}";
+
+    // Get all strikes for this expiration
+    let strikes = tdx.option_list_strikes(symbol, exp).await?;
+    println!("Found {} strikes for {} {}", strikes.len(), symbol, exp);
+
+    // Fetch Greeks for each strike (calls + puts)
+    for strike in &strikes {
+        for &is_call in &[true, false] {
+            let right = if is_call { "C" } else { "P" };
+            if let Ok(greeks) = tdx.option_snapshot_greeks_all(symbol, exp, *strike, is_call).await {
+                if let Some(g) = greeks.first() {
+                    // Strike is a scaled integer: divide by 1000 for dollar price
+                    println!("{} {} \${:.2}: iv={:.4} delta={:+.4} gamma={:.6} theta={:+.4} vega={:.4}",
+                        right, strike / 1000, *strike as f64 / 1000.0,
+                        g.implied_volatility, g.delta, g.gamma, g.theta, g.vega);
+                }
+            }
+        }
+    }`)
+
+    case 'gamma_exposure': return rustMain(`    let symbol = "${sym()}";
+    let exp    = "${exp()}";
+
+    let strikes = tdx.option_list_strikes(symbol, exp).await?;
+
+    let mut net_gex: f64 = 0.0;
+    for strike in &strikes {
+        for &is_call in &[true, false] {
+            let greeks_res = tdx.option_snapshot_greeks_all(symbol, exp, *strike, is_call).await;
+            let oi_res     = tdx.option_snapshot_open_interest(symbol, exp, *strike, is_call).await;
+
+            if let (Ok(greeks), Ok(oi)) = (greeks_res, oi_res) {
+                if let (Some(g), Some(o)) = (greeks.first(), oi.first()) {
+                    // GEX = gamma * OI * 100 (calls +, puts -)
+                    let sign = if is_call { 1.0_f64 } else { -1.0_f64 };
+                    let gex  = sign * g.gamma * o.open_interest as f64 * 100.0;
+                    net_gex += gex;
+                    // Strike is scaled: 500000 = $500
+                    println!("\${:.2} {}: gamma={:.6} oi={} gex={:.2}",
+                        *strike as f64 / 1000.0,
+                        if is_call { "C" } else { "P" },
+                        g.gamma, o.open_interest, gex);
+                }
+            }
+        }
+    }
+    println!("\\nNet GEX: {:.2}", net_gex);`)
+
+    case 'vol_surface': return rustMain(`    let symbol = "${sym()}";
+
+    // Fetch all available expirations
+    let exps = tdx.option_list_expirations(symbol).await?;
+    println!("Found {} expirations", exps.len());
+
+    // Build vol surface — first 8 expirations
+    for exp in exps.iter().take(8) {
+        let strikes = tdx.option_list_strikes(symbol, exp).await?;
+        for strike in &strikes {
+            if let Ok(iv_data) = tdx.option_snapshot_greeks_implied_volatility(symbol, exp, *strike, true).await {
+                if let Some(iv) = iv_data.first() {
+                    if iv.implied_volatility > 0.0 {
+                        // Strike is scaled: divide by 1000 for dollar price
+                        println!("exp={} strike=\${:.2} iv={:.4}",
+                            exp, *strike as f64 / 1000.0, iv.implied_volatility);
+                    }
+                }
+            }
+        }
+    }`)
+
+    case 'unusual_activity': return rustMain(`    let symbol = "${sym()}";
+    let date   = "${singleDate()}";
+
+    // Get all contracts that traded on this date
+    let contracts = tdx.option_list_contracts("EOD", symbol, date).await?;
+    println!("Scanning {} contracts...", contracts.len());
+
+    let mut unusual = Vec::new();
+    for c in &contracts {
+        let oi_res = tdx.option_history_open_interest(
+            symbol, &c.expiration.to_string(), &c.strike.to_string(), &c.right, date).await;
+        let trades_res = tdx.option_history_trade(
+            symbol, &c.expiration.to_string(), &c.strike.to_string(), &c.right, date).await;
+
+        if let (Ok(oi), Ok(trades)) = (oi_res, trades_res) {
+            let volume   = trades.len() as f64;
+            let oi_count = oi.first().map(|o| o.open_interest as f64).unwrap_or(1.0).max(1.0);
+            let vol_oi   = volume / oi_count;
+
+            if vol_oi > 2.0 {
+                unusual.push((c.clone(), volume as usize, oi_count as usize, vol_oi));
+            }
+        }
+    }
+
+    unusual.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap());
+    println!("\\n{:<35}  {:>8}  {:>8}  {:>10}", "Contract", "Volume", "OI", "Vol/OI");
+    println!("{}", "-".repeat(70));
+    for (c, vol, oi, ratio) in unusual.iter().take(20) {
+        // Strike is scaled: divide by 1000 for dollar price
+        println!("{} {} {} \${:.2}  {:>8}  {:>8}  {:>10.2}",
+            symbol, c.expiration, c.right, c.strike as f64 / 1000.0, vol, oi, ratio);
+    }`)
+
+    case 'put_call_ratio': return rustMain(`    let symbol = "${sym()}";
+    let exp    = "${exp()}";
+
+    let strikes = tdx.option_list_strikes(symbol, exp).await?;
+
+    let (mut call_vol, mut put_vol, mut call_oi, mut put_oi) = (0u64, 0u64, 0u64, 0u64);
+
+    for strike in &strikes {
+        for &is_call in &[true, false] {
+            if let Ok(snap) = tdx.option_snapshot_trade(symbol, exp, *strike, is_call).await {
+                if let Some(s) = snap.first() {
+                    if is_call { call_vol += s.volume as u64; } else { put_vol += s.volume as u64; }
+                }
+            }
+            if let Ok(oi_data) = tdx.option_snapshot_open_interest(symbol, exp, *strike, is_call).await {
+                if let Some(o) = oi_data.first() {
+                    if is_call { call_oi += o.open_interest as u64; } else { put_oi += o.open_interest as u64; }
+                }
+            }
+        }
+    }
+
+    let cv = call_vol.max(1) as f64;
+    let co = call_oi.max(1)  as f64;
+    println!("  Call volume  : {:>10}", call_vol);
+    println!("  Put  volume  : {:>10}", put_vol);
+    println!("  P/C vol ratio: {:.4}", put_vol as f64 / cv);
+    println!();
+    println!("  Call OI      : {:>10}", call_oi);
+    println!("  Put  OI      : {:>10}", put_oi);
+    println!("  P/C OI ratio : {:.4}", put_oi as f64 / co);`)
+
+    case 'historical_greeks': return rustMain(`    let symbol = "${sym()}";
+    let exp    = "${exp()}";
+    // Strike uses scaled integers: 500000 = $500.00
+    let strike = ${strike()}_u64;
+    let is_call = ${right() === 'C' ? 'true' : 'false'};  // ${right() === 'C' ? 'call' : 'put'}
+
+    let ticks = tdx.option_history_greeks_all(
+        symbol, exp, strike, is_call, "${singleDate()}", ${interval()}).await?;
+
+    println!("Historical Greeks: {} ticks", ticks.len());
+    println!("{:>12}  {:>7}  {:>7}  {:>9}  {:>7}  {:>7}",
+        "Time(ms)", "IV", "Delta", "Gamma", "Theta", "Vega");
+    println!("{}", "-".repeat(65));
+    for tick in &ticks {
+        println!("{:>12}  {:>7.4}  {:>+7.4}  {:>9.6}  {:>+7.4}  {:>7.4}",
+            tick.ms_of_day, tick.implied_volatility,
+            tick.delta, tick.gamma, tick.theta, tick.vega);
+    }`)
+
+    case 'volume_profile': return rustMain(`    use std::collections::BTreeMap;
+
+    let symbol = "${sym()}";
+
+    let mut price_buckets: BTreeMap<u64, u64> = BTreeMap::new();
+
+    // Fetch EOD list to know which dates had data
+    let eod = tdx.stock_history_eod(symbol, "${startDate()}", "${endDate()}").await?;
+    println!("Fetching trades for {} trading days...", eod.len());
+
+    for day in &eod {
+        if let Ok(trades) = tdx.stock_history_trade(symbol, &day.date).await {
+            for t in &trades {
+                // Bucket to nearest $0.25 (price is in cents, bucket = round to 25 cents)
+                let bucket = (t.price as f64 / 0.25).round() as u64;
+                *price_buckets.entry(bucket).or_insert(0) += t.size as u64;
+            }
+        }
+    }
+
+    let max_vol = price_buckets.values().copied().max().unwrap_or(1);
+    println!("\\nVolume Profile for {} ({} - {}):", symbol, "${startDate()}", "${endDate()}");
+    println!("{:>10}  {:>12}  {}", "Price", "Volume", "Bar");
+    println!("{}", "-".repeat(60));
+    for (bucket, vol) in &price_buckets {
+        let price  = *bucket as f64 * 0.25;
+        let bar    = "#".repeat((*vol as f64 / max_vol as f64 * 40.0) as usize);
+        println!("\${:>9.2}  {:>12}  {}", price, vol, bar);
+    }`)
+
+    case 'market_calendar': return rustMain(`    // Get all trading days, holidays, and early closes for ${yearVal()}
+    let days = tdx.calendar_year(${yearVal()}).await?;
+
+    let trading: Vec<_> = days.iter().filter(|d| d.is_open).collect();
+    let holidays: Vec<_> = days.iter().filter(|d| !d.is_open).collect();
+    let early: Vec<_> = trading.iter().filter(|d| d.early_close).collect();
+
+    println!("Year ${yearVal()} Summary:");
+    println!("  Trading days : {}", trading.len());
+    println!("  Holidays     : {}", holidays.len());
+    println!("  Early closes : {}", early.len());
+    println!();
+    println!("Holidays:");
+    for d in &holidays { println!("  {}", d.date); }
+    println!();
+    println!("Early Closes:");
+    for d in &early { println!("  {}  closes={}", d.date, d.close_time); }`)
+
+    case 'live_quote_monitor': return `${h}
+use std::collections::HashMap;
+
+#[tokio::main]
+async fn main() -> Result<(), thetadatadx::Error> {
+    let creds = Credentials::from_file("creds.txt")?;
+    let tdx   = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
+
+    tdx.start_streaming().await?;
+
+    let symbols = vec![${symsListRust()}];
+    for sym in &symbols {
+        tdx.subscribe_quotes(sym).await?;
+    }
+
+    println!("Monitoring quotes for: {:?}", symbols);
+    println!("{:<8}  {:>8}  {:>8}  {:>8}  {:>8}", "Symbol", "Bid", "Ask", "Spread", "Mid");
+    println!("{}", "-".repeat(50));
+
+    let mut contracts: HashMap<u64, String> = HashMap::new();
+    loop {
+        match tdx.next_event(5000).await? {
+            None => continue,
+            Some(event) => match event.kind.as_str() {
+                "contract_assigned" => {
+                    contracts.insert(event.id, event.detail);
+                }
+                "quote" => {
+                    let name   = contracts.get(&event.contract_id).map(|s| s.as_str()).unwrap_or("?");
+                    let bid    = event.bid;
+                    let ask    = event.ask;
+                    let spread = ask - bid;
+                    let mid    = (bid + ask) / 2.0;
+                    println!("{:<8}  {:>8.2}  {:>8.2}  {:>8.4}  {:>8.2}", name, bid, ask, spread, mid);
+                }
+                _ => {}
+            }
+        }
+    }
+}`
+
+    case 'trade_tape': return `${h}
+use std::collections::HashMap;
+
+#[tokio::main]
+async fn main() -> Result<(), thetadatadx::Error> {
+    let creds = Credentials::from_file("creds.txt")?;
+    let tdx   = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
+
+    tdx.start_streaming().await?;
+
+    let symbols = vec![${symsListRust()}];
+    for sym in &symbols {
+        tdx.subscribe_trades(sym).await?;
+    }
+
+    println!("Trade tape for: {:?}", symbols);
+    println!("{:>12}  {:<8}  {:>8}  {:>8}", "Time", "Symbol", "Price", "Size");
+    println!("{}", "-".repeat(45));
+
+    let mut contracts: HashMap<u64, String> = HashMap::new();
+    loop {
+        match tdx.next_event(5000).await? {
+            None => continue,
+            Some(event) => match event.kind.as_str() {
+                "contract_assigned" => {
+                    contracts.insert(event.id, event.detail);
+                }
+                "trade" => {
+                    let name = contracts.get(&event.contract_id).map(|s| s.as_str()).unwrap_or("?");
+                    let ms   = event.ms_of_day;
+                    let h    = ms / 3_600_000;
+                    let m    = (ms % 3_600_000) / 60_000;
+                    let s    = (ms % 60_000) / 1_000;
+                    println!("{:02}:{:02}:{:02}       {:<8}  {:>8.2}  {:>8}",
+                        h, m, s, name, event.price, event.size);
+                }
+                _ => {}
+            }
+        }
+    }
+}`
+
+    case 'option_flow_scanner': return `${h}
+use std::collections::HashMap;
+
+#[tokio::main]
+async fn main() -> Result<(), thetadatadx::Error> {
+    let creds = Credentials::from_file("creds.txt")?;
+    let tdx   = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
+
+    tdx.start_streaming().await?;
+    tdx.subscribe_full_trades("OPTION").await?;
+
+    let min_size: u32 = ${minSize()};
+    println!("Option Flow Scanner — alerting on size >= {}", min_size);
+    println!("{:<35}  {:>6}  {:>8}  {:>12}  {}", "Contract", "Size", "Price", "Premium", "Side");
+    println!("{}", "-".repeat(80));
+
+    let mut contracts: HashMap<u64, String> = HashMap::new();
+    loop {
+        match tdx.next_event(5000).await? {
+            None => continue,
+            Some(event) => match event.kind.as_str() {
+                "contract_assigned" => {
+                    contracts.insert(event.id, event.detail);
+                }
+                "trade" if event.size >= min_size => {
+                    let contract = contracts.get(&event.contract_id).map(|s| s.as_str()).unwrap_or("?");
+                    let premium  = event.price * event.size as f64 * 100.0;
+                    let mid      = (event.bid + event.ask) / 2.0;
+                    let side     = if event.price >= mid { "BUY" } else { "SELL" };
+                    println!("{:<35}  {:>6}  {:>8.2}  \${:>11,.0}  {}",
+                        contract, event.size, event.price, premium, side);
+                }
+                _ => {}
+            }
+        }
+    }
+}`
+
+    case 'live_option_chain': return `${h}
+use std::collections::HashMap;
+
+#[tokio::main]
+async fn main() -> Result<(), thetadatadx::Error> {
+    let creds = Credentials::from_file("creds.txt")?;
+    let tdx   = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
+
+    tdx.start_streaming().await?;
+
+    let symbol = "${sym()}";
+    let exp    = "${exp()}";
+
+    // Get all strikes, subscribe to each contract
+    let strikes = tdx.option_list_strikes(symbol, exp).await?;
+    for strike in &strikes {
+        for &is_call in &[true, false] {
+            tdx.subscribe_greeks(symbol, exp, *strike, is_call).await?;
+        }
+    }
+    println!("Live chain: {} {}  ({} contracts)", symbol, exp, strikes.len() * 2);
+
+    let mut contracts: HashMap<u64, String> = HashMap::new();
+    let mut chain_state: HashMap<String, (f64, f64, f64, f64, f64)> = HashMap::new();
+
+    loop {
+        match tdx.next_event(5000).await? {
+            None => continue,
+            Some(event) => match event.kind.as_str() {
+                "contract_assigned" => {
+                    contracts.insert(event.id, event.detail);
+                }
+                "greeks" => {
+                    let name = contracts.get(&event.contract_id)
+                        .cloned().unwrap_or_else(|| "?".to_string());
+                    chain_state.insert(name, (
+                        event.implied_volatility, event.delta,
+                        event.gamma, event.theta, event.vega,
+                    ));
+                    // Reprint sorted chain
+                    print!("\\x1b[H\\x1b[J");  // clear terminal
+                    println!("{:<30}  {:>7}  {:>7}  {:>9}  {:>7}  {:>7}",
+                        "Contract", "IV", "Delta", "Gamma", "Theta", "Vega");
+                    println!("{}", "-".repeat(75));
+                    let mut sorted: Vec<_> = chain_state.iter().collect();
+                    sorted.sort_by_key(|(k, _)| k.clone());
+                    for (name, (iv, delta, gamma, theta, vega)) in &sorted {
+                        println!("{:<30}  {:>7.4}  {:>+7.4}  {:>9.6}  {:>+7.4}  {:>7.4}",
+                            name, iv, delta, gamma, theta, vega);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}`
+
+    default:
+      return '// Recipe not yet implemented'
+  }
+}
 </script>
 
 <template>
   <div class="qb-root">
-
-    <!-- Breadcrumb / progress trail -->
-    <div class="qb-trail" v-if="step > 1">
-      <button class="qb-crumb qb-crumb--active" @click="reset">Start over</button>
-      <span class="qb-crumb-sep">/</span>
-      <button class="qb-crumb" :class="{ 'qb-crumb--done': step > 1 }" @click="goToStep(1)">
-        {{ dataModeLabel ?? 'Mode' }}
-      </button>
-      <template v-if="step > 2">
-        <span class="qb-crumb-sep">/</span>
-        <button class="qb-crumb" :class="{ 'qb-crumb--done': step > 2 }" @click="goToStep(2)">
-          {{ assetLabel ?? 'Asset' }}
+    <!-- ── Header ───────────────────────────────────────────────────── -->
+    <div class="qb-header">
+      <div class="qb-header-title">
+        <span class="qb-header-icon">🛠️</span>
+        <div>
+          <h2>Code Recipe Builder</h2>
+          <p>Pick a use case and get working code in seconds.</p>
+        </div>
+      </div>
+      <!-- Step breadcrumbs -->
+      <div class="qb-steps">
+        <button
+          v-for="(label, idx) in ['Recipe', 'Parameters', 'Language', 'Code']"
+          :key="idx"
+          class="qb-step-btn"
+          :class="{
+            'qb-step-active':    step === idx + 1,
+            'qb-step-done':      step > idx + 1,
+            'qb-step-clickable': idx + 1 < step,
+          }"
+          :disabled="idx + 1 >= step"
+          @click="goStep((idx + 1) as 1|2|3|4)"
+        >
+          <span class="qb-step-num">{{ idx + 1 }}</span>
+          {{ label }}
         </button>
-      </template>
-      <template v-if="step > 3">
-        <span class="qb-crumb-sep">/</span>
-        <button class="qb-crumb" :class="{ 'qb-crumb--done': step > 3 }" @click="goToStep(3)">
-          {{ dataTypeLabel ?? 'Data' }}
-        </button>
-      </template>
-      <template v-if="step > 4">
-        <span class="qb-crumb-sep">/</span>
-        <button class="qb-crumb" :class="{ 'qb-crumb--done': step > 4 }" @click="goToStep(4)">
-          Params
-        </button>
-      </template>
-      <template v-if="step > 5">
-        <span class="qb-crumb-sep">/</span>
-        <button class="qb-crumb qb-crumb--done">
-          {{ languageLabel }}
-        </button>
-      </template>
+      </div>
     </div>
 
-    <!-- ── Step 1: Mode ─────────────────────────────────────────────────── -->
-    <section v-if="step === 1" class="qb-section">
-      <h2 class="qb-step-title">
-        <span class="qb-step-number">1</span>
-        What do you want?
-      </h2>
-      <div class="qb-cards qb-cards--2">
-        <button class="qb-card" :class="{ 'qb-card--selected': dataMode === 'historical' }"
-          @click="selectDataMode('historical')">
-          <div class="qb-card-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
-              stroke-linejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-          </div>
-          <div class="qb-card-body">
-            <div class="qb-card-title">Historical Data</div>
-            <div class="qb-card-desc">Query past market data — trades, quotes, OHLC, Greeks, and more</div>
-          </div>
-        </button>
-        <button class="qb-card" :class="{ 'qb-card--selected': dataMode === 'streaming' }"
-          @click="selectDataMode('streaming')">
-          <div class="qb-card-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
-              stroke-linejoin="round">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-            </svg>
-          </div>
-          <div class="qb-card-body">
-            <div class="qb-card-title">Real-Time Streaming</div>
-            <div class="qb-card-desc">Subscribe to live market events via FPSS</div>
-          </div>
+    <!-- ── Step 1: Choose Recipe ─────────────────────────────────────── -->
+    <div v-if="step === 1" class="qb-section">
+      <div class="qb-section-label">Historical Data</div>
+      <div class="qb-recipe-grid">
+        <button
+          v-for="recipe in historicalRecipes"
+          :key="recipe.id"
+          class="qb-recipe-card"
+          @click="pickRecipe(recipe)"
+        >
+          <span class="qb-recipe-icon">{{ recipe.icon }}</span>
+          <span class="qb-recipe-title">{{ recipe.title }}</span>
+          <span class="qb-recipe-desc">{{ recipe.description }}</span>
         </button>
       </div>
-    </section>
 
-    <!-- ── Step 2: Asset ─────────────────────────────────────────────────── -->
-    <section v-if="step === 2" class="qb-section">
-      <h2 class="qb-step-title">
-        <span class="qb-step-number">2</span>
-        What asset?
-      </h2>
-
-      <!-- Streaming only supports Stock / Option -->
-      <template v-if="dataMode === 'historical'">
-        <div class="qb-cards qb-cards--3">
-          <button class="qb-card" :class="{ 'qb-card--selected': assetType === 'stock' }"
-            @click="selectAssetType('stock')">
-            <div class="qb-card-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
-                stroke-linejoin="round">
-                <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
-                <polyline points="16 7 22 7 22 13" />
-              </svg>
-            </div>
-            <div class="qb-card-body">
-              <div class="qb-card-title">Stock</div>
-              <div class="qb-card-desc">Equities, e.g. AAPL, TSLA</div>
-            </div>
-          </button>
-          <button class="qb-card" :class="{ 'qb-card--selected': assetType === 'option' }"
-            @click="selectAssetType('option')">
-            <div class="qb-card-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
-                stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M9 9h.01M15 9h.01M9.5 15a3.5 3.5 0 0 0 5 0" />
-              </svg>
-            </div>
-            <div class="qb-card-body">
-              <div class="qb-card-title">Option</div>
-              <div class="qb-card-desc">Calls & puts, e.g. SPY 450C 2024-06-21</div>
-            </div>
-          </button>
-          <button class="qb-card" :class="{ 'qb-card--selected': assetType === 'index' }"
-            @click="selectAssetType('index')">
-            <div class="qb-card-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
-                stroke-linejoin="round">
-                <line x1="18" y1="20" x2="18" y2="10" />
-                <line x1="12" y1="20" x2="12" y2="4" />
-                <line x1="6" y1="20" x2="6" y2="14" />
-              </svg>
-            </div>
-            <div class="qb-card-body">
-              <div class="qb-card-title">Index</div>
-              <div class="qb-card-desc">Market indices, e.g. SPX, VIX</div>
-            </div>
-          </button>
-          <button class="qb-card" :class="{ 'qb-card--selected': assetType === 'calendar' }"
-            @click="selectAssetType('calendar')">
-            <div class="qb-card-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
-                stroke-linejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" />
-                <line x1="16" y1="2" x2="16" y2="6" />
-                <line x1="8" y1="2" x2="8" y2="6" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-                <line x1="8" y1="14" x2="8" y2="14" stroke-width="2.5" stroke-linecap="round" />
-                <line x1="12" y1="14" x2="12" y2="14" stroke-width="2.5" stroke-linecap="round" />
-              </svg>
-            </div>
-            <div class="qb-card-body">
-              <div class="qb-card-title">Calendar</div>
-              <div class="qb-card-desc">Market hours &amp; holidays</div>
-            </div>
-          </button>
-          <button class="qb-card" :class="{ 'qb-card--selected': assetType === 'rate' }"
-            @click="selectAssetType('rate')">
-            <div class="qb-card-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
-                stroke-linejoin="round">
-                <line x1="12" y1="1" x2="12" y2="23" />
-                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-              </svg>
-            </div>
-            <div class="qb-card-body">
-              <div class="qb-card-title">Interest Rate</div>
-              <div class="qb-card-desc">Risk-free rate (SOFR, etc.)</div>
-            </div>
-          </button>
-        </div>
-      </template>
-
-      <template v-else>
-        <div class="qb-cards qb-cards--2">
-          <button class="qb-card" :class="{ 'qb-card--selected': assetType === 'stock' }"
-            @click="selectAssetType('stock')">
-            <div class="qb-card-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
-                stroke-linejoin="round">
-                <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
-                <polyline points="16 7 22 7 22 13" />
-              </svg>
-            </div>
-            <div class="qb-card-body">
-              <div class="qb-card-title">Stock</div>
-              <div class="qb-card-desc">Stream live equity quotes &amp; trades</div>
-            </div>
-          </button>
-          <button class="qb-card" :class="{ 'qb-card--selected': assetType === 'option' }"
-            @click="selectAssetType('option')">
-            <div class="qb-card-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
-                stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M9 9h.01M15 9h.01M9.5 15a3.5 3.5 0 0 0 5 0" />
-              </svg>
-            </div>
-            <div class="qb-card-body">
-              <div class="qb-card-title">Option</div>
-              <div class="qb-card-desc">Stream live option contract quotes &amp; trades</div>
-            </div>
-          </button>
-        </div>
-      </template>
-    </section>
-
-    <!-- ── Step 3: Data type ──────────────────────────────────────────────── -->
-    <section v-if="step === 3" class="qb-section">
-      <h2 class="qb-step-title">
-        <span class="qb-step-number">3</span>
-        What data?
-      </h2>
-      <div class="qb-list">
-        <button v-for="opt in dataTypeOptions" :key="opt.id" class="qb-list-item"
-          :class="{ 'qb-list-item--selected': dataType === opt.id }" @click="selectDataType(opt.id)">
-          <div class="qb-list-label">{{ opt.label }}</div>
-          <div class="qb-list-desc">{{ opt.description }}</div>
+      <div class="qb-section-label qb-mt">Real-Time Streaming</div>
+      <div class="qb-recipe-grid">
+        <button
+          v-for="recipe in realtimeRecipes"
+          :key="recipe.id"
+          class="qb-recipe-card qb-recipe-card--rt"
+          @click="pickRecipe(recipe)"
+        >
+          <span class="qb-recipe-icon">{{ recipe.icon }}</span>
+          <span class="qb-recipe-title">{{ recipe.title }}</span>
+          <span class="qb-recipe-desc">{{ recipe.description }}</span>
         </button>
       </div>
-    </section>
+    </div>
 
-    <!-- ── Step 4: Parameters ────────────────────────────────────────────── -->
-    <section v-if="step === 4" class="qb-section">
-      <h2 class="qb-step-title">
-        <span class="qb-step-number">4</span>
-        Parameters
-      </h2>
-      <div class="qb-form">
+    <!-- ── Step 2: Parameters ────────────────────────────────────────── -->
+    <div v-if="step === 2" class="qb-section">
+      <div class="qb-recipe-badge">
+        <span>{{ currentRecipe?.icon }}</span>
+        <strong>{{ currentRecipe?.title }}</strong>
+      </div>
 
-        <!-- Symbol -->
-        <div class="qb-field" v-if="needsSymbol">
-          <label class="qb-label" for="qb-symbol">
-            {{ isSnapshotMulti ? 'Symbol (comma-separated)' : 'Symbol / Ticker' }}
-          </label>
-          <input id="qb-symbol" class="qb-input" type="text" v-model="params.symbol"
-            :placeholder="isSnapshotMulti ? 'AAPL,TSLA,MSFT' : 'AAPL'" />
-          <span class="qb-hint">Case-insensitive. e.g. AAPL</span>
+      <div class="qb-param-grid">
+
+        <!-- Symbol (single) -->
+        <div v-if="needsSymbol" class="qb-param-group qb-param-full">
+          <label class="qb-label">Symbol</label>
+          <div class="qb-autocomplete-wrap" ref="autocompleteRef">
+            <input
+              class="qb-input"
+              type="text"
+              :value="symbolInput"
+              placeholder="e.g. AAPL"
+              autocomplete="off"
+              @input="e => { symbolInput = (e.target as HTMLInputElement).value; onSymbolInput() }"
+              @focus="onSymbolFocus"
+              @blur="onSymbolBlur"
+              @keydown="onSymbolKeydown"
+            />
+            <div v-if="autocompleteVisible && filteredSuggestions.length > 0" class="qb-dropdown">
+              <template v-for="[cat, items] in symbolsByCategory" :key="cat">
+                <div class="qb-dropdown-cat">{{ cat }}</div>
+                <button
+                  v-for="(s, i) in items"
+                  :key="s.symbol"
+                  class="qb-dropdown-item"
+                  :class="{ 'qb-dropdown-item--selected': acSelectedIdx === filteredSuggestions.indexOf(s) }"
+                  @mousedown.prevent="selectSymbol(s)"
+                >
+                  <span class="qb-dropdown-sym">{{ s.symbol }}</span>
+                  <span class="qb-dropdown-name">{{ s.name }}</span>
+                </button>
+              </template>
+            </div>
+          </div>
         </div>
 
-        <!-- Rate symbol -->
-        <div class="qb-field" v-if="needsRateSymbol">
-          <label class="qb-label" for="qb-rate-symbol">Rate Symbol</label>
-          <input id="qb-rate-symbol" class="qb-input" type="text" v-model="params.rate_symbol"
-            placeholder="SOFR" />
+        <!-- Symbols list -->
+        <div v-if="needsSymbolsList" class="qb-param-group qb-param-full">
+          <label class="qb-label">Symbols <span class="qb-hint">comma or space separated</span></label>
+          <input
+            class="qb-input"
+            type="text"
+            v-model="params.symbolsRaw"
+            placeholder="AAPL, MSFT, SPY"
+          />
+          <div class="qb-helper">Parsed: {{ symbolsList.join(' · ') }}</div>
         </div>
 
         <!-- Date range -->
-        <div class="qb-field-row" v-if="needsDateRange">
-          <div class="qb-field">
-            <label class="qb-label" for="qb-start">Start Date</label>
-            <input id="qb-start" class="qb-input" type="text" v-model="params.start_date"
-              placeholder="YYYYMMDD" maxlength="8" />
-          </div>
-          <div class="qb-field">
-            <label class="qb-label" for="qb-end">End Date</label>
-            <input id="qb-end" class="qb-input" type="text" v-model="params.end_date"
-              placeholder="YYYYMMDD" maxlength="8" />
-          </div>
-        </div>
-
-        <!-- Single date -->
-        <div class="qb-field" v-if="needsSingleDate">
-          <label class="qb-label" for="qb-date">Date</label>
-          <input id="qb-date" class="qb-input" type="text" v-model="params.date"
-            placeholder="YYYYMMDD" maxlength="8" />
-        </div>
-
-        <!-- Interval -->
-        <div class="qb-field" v-if="needsInterval">
-          <label class="qb-label" for="qb-interval">Interval</label>
-          <select id="qb-interval" class="qb-select" v-model="params.interval">
-            <option v-for="opt in intervalOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-          </select>
-        </div>
-
-        <!-- Option expiration -->
-        <div class="qb-field" v-if="needsExpiration">
-          <label class="qb-label" for="qb-exp">Expiration Date</label>
-          <input id="qb-exp" class="qb-input" type="text" v-model="params.expiration"
-            placeholder="YYYYMMDD" maxlength="8" />
-        </div>
-
-        <!-- Option contract for streaming -->
-        <template v-if="needsOptionContractForStream">
-          <div class="qb-field">
-            <label class="qb-label" for="qb-opt-sym">Underlying Symbol</label>
-            <input id="qb-opt-sym" class="qb-input" type="text" v-model="params.symbol" placeholder="SPY" />
-          </div>
-          <div class="qb-field">
-            <label class="qb-label" for="qb-opt-exp">Expiration Date</label>
-            <input id="qb-opt-exp" class="qb-input" type="text" v-model="params.expiration"
-              placeholder="YYYYMMDD" maxlength="8" />
-          </div>
-        </template>
-
-        <!-- Strike + Right (option params) -->
-        <template v-if="needsOptionParams || needsOptionContractForStream">
-          <div class="qb-field">
-            <label class="qb-label" for="qb-strike">Strike Price</label>
-            <input id="qb-strike" class="qb-input" type="number" v-model="params.strike"
-              placeholder="450" step="0.5" />
-          </div>
-          <div class="qb-field">
-            <label class="qb-label">Right</label>
-            <div class="qb-radio-group">
-              <label class="qb-radio">
-                <input type="radio" name="right" value="C" v-model="params.right" />
-                <span class="qb-radio-label">Call</span>
-              </label>
-              <label class="qb-radio">
-                <input type="radio" name="right" value="P" v-model="params.right" />
-                <span class="qb-radio-label">Put</span>
-              </label>
+        <template v-if="needsDateRange">
+          <div class="qb-param-group qb-param-full">
+            <label class="qb-label">Date Range</label>
+            <div class="qb-chips">
+              <button
+                v-for="p in DATE_PRESETS.filter(p => p.isRange !== false)"
+                :key="p.label"
+                class="qb-chip"
+                :class="{ 'qb-chip--active': activeDatePreset === p.label }"
+                @click="selectDatePreset(p)"
+              >{{ p.label }}</button>
             </div>
           </div>
+          <div class="qb-param-group">
+            <label class="qb-label">Start Date <span class="qb-hint">YYYYMMDD</span></label>
+            <input class="qb-input" type="text" v-model="params.start_date" maxlength="8" placeholder="20240101" />
+          </div>
+          <div class="qb-param-group">
+            <label class="qb-label">End Date <span class="qb-hint">YYYYMMDD</span></label>
+            <input class="qb-input" type="text" v-model="params.end_date" maxlength="8" placeholder="20241231" />
+          </div>
         </template>
 
-        <!-- At-time -->
-        <div class="qb-field" v-if="needsAtTime">
-          <label class="qb-label" for="qb-time">Time of Day (HHMMSS)</label>
-          <input id="qb-time" class="qb-input" type="text" v-model="params.time"
-            placeholder="093000" maxlength="6" />
-          <span class="qb-hint">e.g. 093000 for 09:30:00 ET</span>
+        <!-- Single date -->
+        <template v-if="needsSingleDate">
+          <div class="qb-param-group qb-param-full">
+            <label class="qb-label">Date</label>
+            <div class="qb-chips">
+              <button
+                v-for="p in DATE_PRESETS.filter(p => !p.isRange)"
+                :key="p.label"
+                class="qb-chip"
+                :class="{ 'qb-chip--active': activeSinglePreset === p.label }"
+                @click="selectDatePreset(p)"
+              >{{ p.label }}</button>
+            </div>
+            <input class="qb-input qb-mt-sm" type="text" v-model="params.date" maxlength="8" placeholder="20240101" />
+          </div>
+        </template>
+
+        <!-- Interval -->
+        <div v-if="needsInterval" class="qb-param-group qb-param-full">
+          <label class="qb-label">Interval</label>
+          <div class="qb-chips">
+            <button
+              v-for="opt in INTERVAL_OPTIONS"
+              :key="opt.value"
+              class="qb-chip"
+              :class="{ 'qb-chip--active': params.interval === opt.value }"
+              @click="params.interval = opt.value"
+            >{{ opt.label }}</button>
+          </div>
         </div>
 
-        <!-- Year (calendar) -->
-        <div class="qb-field" v-if="needsYear">
-          <label class="qb-label" for="qb-year">Year</label>
-          <input id="qb-year" class="qb-input" type="number" v-model="params.year"
-            placeholder="2024" min="2004" max="2030" />
+        <!-- Expiration -->
+        <div v-if="needsExpiration" class="qb-param-group">
+          <label class="qb-label">Expiration <span class="qb-hint">YYYYMMDD</span></label>
+          <input class="qb-input" type="text" v-model="params.expiration" maxlength="8" placeholder="20250620" />
+          <div class="qb-helper">Use <code>option_list_expirations()</code> to get available dates</div>
         </div>
 
+        <!-- Strike -->
+        <div v-if="needsStrike" class="qb-param-group">
+          <label class="qb-label">Strike <span class="qb-hint">scaled integer</span></label>
+          <input class="qb-input" type="text" v-model="params.strike" placeholder="500000" />
+          <div class="qb-helper">500000 = $500.00 &mdash; use <code>option_list_strikes()</code></div>
+        </div>
+
+        <!-- Right (Call/Put) -->
+        <div v-if="needsRight" class="qb-param-group">
+          <label class="qb-label">Right</label>
+          <div class="qb-toggle-group">
+            <button
+              class="qb-toggle-btn"
+              :class="{ 'qb-toggle-btn--call': params.right === 'C' }"
+              @click="params.right = 'C'"
+            >Call</button>
+            <button
+              class="qb-toggle-btn"
+              :class="{ 'qb-toggle-btn--put': params.right === 'P' }"
+              @click="params.right = 'P'"
+            >Put</button>
+          </div>
+        </div>
+
+        <!-- Year -->
+        <div v-if="needsYear" class="qb-param-group">
+          <label class="qb-label">Year</label>
+          <input class="qb-input" type="number" v-model="params.year" min="2000" max="2030" />
+        </div>
+
+        <!-- Min size -->
+        <div v-if="needsMinSize" class="qb-param-group">
+          <label class="qb-label">Min Contract Size <span class="qb-hint">alert threshold</span></label>
+          <input class="qb-input" type="number" v-model="params.min_size" min="1" />
+          <div class="qb-helper">Flag trades with size &ge; this value as "unusual"</div>
+        </div>
+
+      </div><!-- end param-grid -->
+
+      <div class="qb-actions">
+        <button class="qb-btn qb-btn--secondary" @click="startOver">Start Over</button>
+        <button class="qb-btn qb-btn--primary" @click="toStep3">Choose Language &rarr;</button>
+      </div>
+    </div>
+
+    <!-- ── Step 3: Language ───────────────────────────────────────────── -->
+    <div v-if="step === 3" class="qb-section">
+      <div class="qb-recipe-badge">
+        <span>{{ currentRecipe?.icon }}</span>
+        <strong>{{ currentRecipe?.title }}</strong>
       </div>
 
-      <button class="qb-btn-primary" @click="step = 5">
-        Continue to Language
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-          stroke-linejoin="round">
-          <polyline points="9 18 15 12 9 6" />
-        </svg>
-      </button>
-    </section>
-
-    <!-- ── Step 5: Language ──────────────────────────────────────────────── -->
-    <section v-if="step === 5" class="qb-section">
-      <h2 class="qb-step-title">
-        <span class="qb-step-number">5</span>
-        Choose language
-      </h2>
-      <div class="qb-cards qb-cards--2">
-        <button class="qb-card" :class="{ 'qb-card--selected': language === 'rust' }"
-          @click="selectLanguage('rust')">
-          <div class="qb-card-icon qb-card-icon--lang">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path
-                d="M11.9 0a12 12 0 1 0 .2 0zm.7 2.76.75 1.43.85-.83 1.48 3.84-1.94.77 1 2.53-1.68-.66-.72 1.82-1.64-4.17.83-.32-.93-2.37zM7.02 3.5l.83.32-.93 2.37.83.32-1.64 4.17-.72-1.82-1.68.66 1-2.53-1.94-.77 1.48-3.84.85.83.75-1.43zm3.53.13 2.4.57-.26 1.06 1.56.38-.76 3.1-1.36-.34.14-.57-1.4-.34-.12.49-1.36-.34.76-3.1 1.56.38-.26-1.06zM12 12.7a.3.3 0 1 1 0 .6.3.3 0 0 1 0-.6zm-4.92 1.7 1.22.5-.26.64-1.68-.68.02-.7 1.43.06-.4-.96.62-.26.27.65-.61.25-.16.39-.45.11zm9.84 0 .16.39-.45-.11-.61-.25.27-.65.62.26-.4.96 1.43-.06.02.7-1.68.68-.26-.64 1.22-.5-.32-.78z" />
-            </svg>
-          </div>
-          <div class="qb-card-body">
-            <div class="qb-card-title">Rust</div>
-            <div class="qb-card-desc">Async/await with Tokio</div>
-          </div>
+      <p class="qb-lang-prompt">Choose your language:</p>
+      <div class="qb-lang-grid">
+        <button
+          class="qb-lang-card"
+          :class="{ 'qb-lang-card--selected': language === 'python' }"
+          @click="toStep4('python')"
+        >
+          <span class="qb-lang-icon">🐍</span>
+          <span class="qb-lang-name">Python</span>
+          <span class="qb-lang-desc">thetadatadx · pandas-friendly</span>
         </button>
-        <button class="qb-card" :class="{ 'qb-card--selected': language === 'python' }"
-          @click="selectLanguage('python')">
-          <div class="qb-card-icon qb-card-icon--lang">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path
-                d="M11.99 2C6.47 2 6.81 4.37 6.81 4.37l.01 2.45h5.28v.73H4.81S2 7.22 2 12.8s2.45 5.43 2.45 5.43H5.9v-2.61s-.07-2.45 2.41-2.45h4.16s2.33.04 2.33-2.25V6.29S15.18 2 11.99 2zm-1.37 1.33c.42 0 .76.34.76.76s-.34.76-.76.76-.76-.34-.76-.76.34-.76.76-.76z" />
-              <path
-                d="M12.01 22c5.52 0 5.18-2.37 5.18-2.37l-.01-2.45h-5.28v-.73h7.29S22 16.78 22 11.2s-2.45-5.43-2.45-5.43h-1.45v2.61s.07 2.45-2.41 2.45H11.53s-2.33-.04-2.33 2.25v3.63S8.82 22 12.01 22zm1.37-1.33c-.42 0-.76-.34-.76-.76s.34-.76.76-.76.76.34.76.76-.34.76-.76.76z" />
-            </svg>
-          </div>
-          <div class="qb-card-body">
-            <div class="qb-card-title">Python</div>
-            <div class="qb-card-desc">Synchronous API with f-string output</div>
-          </div>
+        <button
+          class="qb-lang-card"
+          :class="{ 'qb-lang-card--selected': language === 'rust' }"
+          @click="toStep4('rust')"
+        >
+          <span class="qb-lang-icon">🦀</span>
+          <span class="qb-lang-name">Rust</span>
+          <span class="qb-lang-desc">thetadatadx · tokio async</span>
         </button>
       </div>
-    </section>
 
-    <!-- ── Step 6: Output ────────────────────────────────────────────────── -->
-    <section v-if="step === 6 && generatedCode" class="qb-section">
-      <h2 class="qb-step-title">
-        <span class="qb-step-number">6</span>
-        Generated code
-      </h2>
-      <div class="qb-output">
-        <div class="qb-output-header">
-          <span class="qb-output-lang">{{ codeLanguageLabel }}</span>
-          <button class="qb-copy-btn" @click="copyCode" :class="{ 'qb-copy-btn--copied': copied }">
-            <template v-if="!copied">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-              </svg>
-              Copy
-            </template>
-            <template v-else>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
-                stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              Copied!
-            </template>
-          </button>
+      <div class="qb-actions">
+        <button class="qb-btn qb-btn--secondary" @click="startOver">Start Over</button>
+      </div>
+    </div>
+
+    <!-- ── Step 4: Generated Code ─────────────────────────────────────── -->
+    <div v-if="step === 4" class="qb-section">
+      <div class="qb-code-header">
+        <div class="qb-recipe-badge">
+          <span>{{ currentRecipe?.icon }}</span>
+          <strong>{{ currentRecipe?.title }}</strong>
+          <span class="qb-lang-pill" :class="`qb-lang-pill--${language}`">
+            {{ language === 'python' ? '🐍 Python' : '🦀 Rust' }}
+          </span>
         </div>
-        <pre class="qb-pre"><code :class="`language-${codeLanguageLabel}`">{{ generatedCode }}</code></pre>
+        <button class="qb-copy-btn" :class="{ 'qb-copy-btn--done': copied }" @click="copyCode">
+          <span v-if="!copied">Copy</span>
+          <span v-else>Copied!</span>
+        </button>
       </div>
 
-      <button class="qb-btn-reset" @click="reset">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-          stroke-linejoin="round">
-          <polyline points="1 4 1 10 7 10" />
-          <path d="M3.51 15a9 9 0 1 0 .49-3.5" />
-        </svg>
-        Start a new query
-      </button>
-    </section>
+      <div class="qb-code-wrap">
+        <pre class="qb-code" v-html="highlightedCode"></pre>
+      </div>
 
+      <div class="qb-actions">
+        <button class="qb-btn qb-btn--secondary" @click="startOver">Start Over</button>
+        <button class="qb-btn qb-btn--ghost" @click="goStep(2)">Edit Parameters</button>
+        <button class="qb-btn qb-btn--ghost" @click="goStep(3)">Switch Language</button>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-/* ─── Root ─────────────────────────────────────────────────────────────── */
+/* ─── Root ─────────────────────────────────────────────────────────────────── */
 .qb-root {
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 8px 0 48px;
-  font-family: var(--vp-font-family-base);
-}
-
-/* ─── Trail / breadcrumb ─────────────────────────────────────────────── */
-.qb-trail {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-  margin-bottom: 28px;
-  font-size: 13px;
-}
-
-.qb-crumb {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--vp-c-text-3);
-  padding: 2px 4px;
-  border-radius: 4px;
-  transition: color 0.15s;
-  font-size: 13px;
-  font-family: var(--vp-font-family-base);
-}
-
-.qb-crumb:hover {
-  color: var(--vp-c-brand-1);
-}
-
-.qb-crumb--active {
-  color: var(--vp-c-text-3);
-  font-weight: 500;
-}
-
-.qb-crumb--done {
-  color: var(--vp-c-brand-1);
-  font-weight: 600;
-}
-
-.qb-crumb-sep {
-  color: var(--vp-c-text-3);
-  user-select: none;
-}
-
-/* ─── Section ────────────────────────────────────────────────────────── */
-.qb-section {
-  animation: qb-fade-in 0.2s ease;
-}
-
-@keyframes qb-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* ─── Step title ─────────────────────────────────────────────────────── */
-.qb-step-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 18px;
-  font-weight: 700;
+  font-family: var(--vp-font-family-base, -apple-system, BlinkMacSystemFont, sans-serif);
   color: var(--vp-c-text-1);
-  margin: 0 0 20px;
-  padding: 0;
-  border: none;
-  letter-spacing: -0.01em;
-}
-
-.qb-step-number {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--vp-c-brand-1);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-/* ─── Cards (mode / asset / language) ───────────────────────────────── */
-.qb-cards {
-  display: grid;
-  gap: 12px;
-}
-
-.qb-cards--2 {
-  grid-template-columns: repeat(2, 1fr);
-}
-
-.qb-cards--3 {
-  grid-template-columns: repeat(3, 1fr);
-}
-
-@media (max-width: 540px) {
-
-  .qb-cards--2,
-  .qb-cards--3 {
-    grid-template-columns: 1fr;
-  }
-}
-
-.qb-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 16px 18px;
-  border: 1.5px solid var(--vp-c-divider);
-  border-radius: 10px;
-  background: var(--vp-c-bg-soft);
-  cursor: pointer;
-  text-align: left;
-  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
-  font-family: var(--vp-font-family-base);
-}
-
-.qb-card:hover {
-  border-color: var(--vp-c-brand-1);
-  background: var(--vp-c-bg);
-  box-shadow: 0 2px 12px var(--vp-c-brand-soft);
-}
-
-.qb-card--selected {
-  border-color: var(--vp-c-brand-1);
-  background: var(--vp-c-brand-soft);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-}
-
-.qb-card-icon {
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
   background: var(--vp-c-bg);
   border: 1px solid var(--vp-c-divider);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--vp-c-brand-1);
-  margin-top: 1px;
-}
-
-.qb-card-icon svg {
-  width: 18px;
-  height: 18px;
-}
-
-.qb-card-icon--lang {
-  background: var(--vp-c-bg);
-}
-
-.qb-card--selected .qb-card-icon {
-  background: var(--vp-c-brand-1);
-  border-color: var(--vp-c-brand-1);
-  color: #fff;
-}
-
-.qb-card-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.qb-card-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--vp-c-text-1);
-  margin-bottom: 3px;
-  line-height: 1.3;
-}
-
-.qb-card-desc {
-  font-size: 13px;
-  color: var(--vp-c-text-2);
-  line-height: 1.5;
-}
-
-/* ─── List (data type) ───────────────────────────────────────────────── */
-.qb-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  border: 1.5px solid var(--vp-c-divider);
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
 }
 
-.qb-list-item {
+/* ─── Header ────────────────────────────────────────────────────────────────── */
+.qb-header {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  padding: 12px 16px;
-  border: none;
-  border-bottom: 1px solid var(--vp-c-divider);
-  background: var(--vp-c-bg);
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.12s;
-  font-family: var(--vp-font-family-base);
-}
-
-.qb-list-item:last-child {
-  border-bottom: none;
-}
-
-.qb-list-item:hover {
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
   background: var(--vp-c-bg-soft);
+  border-bottom: 1px solid var(--vp-c-divider);
 }
 
-.qb-list-item--selected {
-  background: var(--vp-c-brand-soft);
-  border-left: 3px solid var(--vp-c-brand-1);
+.qb-header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.qb-list-item--selected .qb-list-label {
-  color: var(--vp-c-brand-1);
+.qb-header-icon {
+  font-size: 28px;
+  line-height: 1;
 }
 
-.qb-list-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--vp-c-text-1);
-  margin-bottom: 2px;
+.qb-header-title h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+  border: none;
 }
 
-.qb-list-desc {
-  font-size: 12.5px;
+.qb-header-title p {
+  margin: 2px 0 0;
+  font-size: 13px;
   color: var(--vp-c-text-2);
   line-height: 1.4;
 }
 
-/* ─── Form ───────────────────────────────────────────────────────────── */
-.qb-form {
+/* ─── Step breadcrumbs ─────────────────────────────────────────────────────── */
+.qb-steps {
   display: flex;
-  flex-direction: column;
-  gap: 18px;
-  margin-bottom: 24px;
-  padding: 20px;
-  border: 1.5px solid var(--vp-c-divider);
-  border-radius: 10px;
-  background: var(--vp-c-bg-soft);
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
-.qb-field {
+.qb-step-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--vp-c-text-2);
+  cursor: default;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.qb-step-btn.qb-step-clickable {
+  cursor: pointer;
+  border-color: var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
+}
+
+.qb-step-btn.qb-step-clickable:hover {
+  background: var(--vp-c-brand-soft);
+}
+
+.qb-step-btn.qb-step-active {
+  background: var(--vp-c-brand-1);
+  border-color: var(--vp-c-brand-1);
+  color: #fff;
+  cursor: default;
+}
+
+.qb-step-btn.qb-step-done {
+  border-color: var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
+}
+
+.qb-step-num {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.qb-step-active .qb-step-num { background: rgba(255,255,255,0.3); }
+
+/* ─── Section ───────────────────────────────────────────────────────────────── */
+.qb-section {
+  padding: 24px;
+}
+
+.qb-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-2);
+  margin-bottom: 12px;
+}
+
+.qb-mt { margin-top: 28px; }
+
+/* ─── Recipe cards ──────────────────────────────────────────────────────────── */
+.qb-recipe-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.qb-recipe-card {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  padding: 14px 16px;
+  background: var(--vp-c-bg);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  position: relative;
+  overflow: hidden;
 }
 
-.qb-field-row {
+.qb-recipe-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--vp-c-brand-soft);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.qb-recipe-card:hover {
+  border-color: var(--vp-c-brand-1);
+  box-shadow: 0 0 0 2px var(--vp-c-brand-soft);
+}
+
+.qb-recipe-card:hover::before { opacity: 1; }
+
+.qb-recipe-card--rt {
+  border-left: 2px solid var(--vp-c-brand-3);
+}
+
+.qb-recipe-card--rt:hover {
+  border-color: var(--vp-c-brand-2);
+}
+
+.qb-recipe-icon {
+  font-size: 22px;
+  line-height: 1;
+  position: relative;
+  z-index: 1;
+}
+
+.qb-recipe-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+  line-height: 1.3;
+  position: relative;
+  z-index: 1;
+}
+
+.qb-recipe-desc {
+  font-size: 12px;
+  color: var(--vp-c-text-2);
+  line-height: 1.45;
+  position: relative;
+  z-index: 1;
+}
+
+/* ─── Recipe badge (step 2/3/4 header) ────────────────────────────────────── */
+.qb-recipe-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+/* ─── Parameter grid ────────────────────────────────────────────────────────── */
+.qb-param-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 18px 24px;
 }
 
-@media (max-width: 480px) {
-  .qb-field-row {
-    grid-template-columns: 1fr;
-  }
+@media (max-width: 600px) {
+  .qb-param-grid { grid-template-columns: 1fr; }
 }
 
+.qb-param-group { display: flex; flex-direction: column; gap: 6px; }
+.qb-param-full  { grid-column: 1 / -1; }
+
+/* ─── Labels / inputs ───────────────────────────────────────────────────────── */
 .qb-label {
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--vp-c-text-2);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  color: var(--vp-c-text-1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.qb-input,
-.qb-select {
-  height: 38px;
-  padding: 0 12px;
-  border: 1.5px solid var(--vp-c-divider);
-  border-radius: 7px;
-  background: var(--vp-c-bg);
-  color: var(--vp-c-text-1);
-  font-size: 14px;
-  font-family: var(--vp-font-family-mono);
-  transition: border-color 0.15s;
-  outline: none;
+.qb-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--vp-c-text-3);
+}
+
+.qb-input {
   width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: var(--vp-font-family-base);
+  color: var(--vp-c-text-1);
+  background: var(--vp-c-bg);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
   box-sizing: border-box;
 }
 
-.qb-input:focus,
-.qb-select:focus {
+.qb-input:focus {
+  border-color: var(--vp-c-brand-1);
+  box-shadow: 0 0 0 2px var(--vp-c-brand-soft);
+}
+
+.qb-helper {
+  font-size: 11.5px;
+  color: var(--vp-c-text-3);
+  line-height: 1.5;
+}
+
+.qb-helper code {
+  font-family: var(--vp-font-family-mono, monospace);
+  font-size: 11px;
+  background: var(--vp-c-bg-soft);
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: var(--vp-c-brand-1);
+}
+
+.qb-mt-sm { margin-top: 6px; }
+
+/* ─── Chips ─────────────────────────────────────────────────────────────────── */
+.qb-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.qb-chip {
+  padding: 4px 12px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--vp-c-text-2);
+  background: var(--vp-c-bg);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+
+.qb-chip:hover {
+  border-color: var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
+}
+
+.qb-chip--active {
+  background: var(--vp-c-brand-1);
+  border-color: var(--vp-c-brand-1);
+  color: #fff;
+}
+
+/* ─── Toggle (Call/Put) ─────────────────────────────────────────────────────── */
+.qb-toggle-group {
+  display: flex;
+  gap: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--vp-c-divider);
+  width: fit-content;
+}
+
+.qb-toggle-btn {
+  padding: 7px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vp-c-text-2);
+  background: var(--vp-c-bg);
+  border: none;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.qb-toggle-btn:first-child { border-right: 1px solid var(--vp-c-divider); }
+
+.qb-toggle-btn--call {
+  background: #16a34a;
+  color: #fff;
+}
+
+.qb-toggle-btn--put {
+  background: #dc2626;
+  color: #fff;
+}
+
+/* ─── Autocomplete dropdown ─────────────────────────────────────────────────── */
+.qb-autocomplete-wrap { position: relative; }
+
+.qb-dropdown {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  right: 0;
+  z-index: 200;
+  background: var(--vp-c-bg);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.qb-dropdown-cat {
+  padding: 6px 12px 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+}
+
+.qb-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 12px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.qb-dropdown-item:hover,
+.qb-dropdown-item--selected {
+  background: var(--vp-c-bg-soft);
+}
+
+.qb-dropdown-sym {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--vp-c-text-1);
+  font-family: var(--vp-font-family-mono, monospace);
+  min-width: 52px;
+}
+
+.qb-dropdown-name {
+  font-size: 12px;
+  color: var(--vp-c-text-2);
+}
+
+/* ─── Language cards ────────────────────────────────────────────────────────── */
+.qb-lang-prompt {
+  font-size: 15px;
+  color: var(--vp-c-text-2);
+  margin-bottom: 16px;
+}
+
+.qb-lang-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  max-width: 480px;
+}
+
+@media (max-width: 500px) {
+  .qb-lang-grid { grid-template-columns: 1fr; }
+}
+
+.qb-lang-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 20px;
+  border: 2px solid var(--vp-c-divider);
+  border-radius: 10px;
+  background: var(--vp-c-bg);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.qb-lang-card:hover {
   border-color: var(--vp-c-brand-1);
   box-shadow: 0 0 0 3px var(--vp-c-brand-soft);
 }
 
-.qb-select {
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 16px;
-  padding-right: 34px;
-  cursor: pointer;
-}
-
-.qb-hint {
-  font-size: 11.5px;
-  color: var(--vp-c-text-3);
-}
-
-.qb-radio-group {
-  display: flex;
-  gap: 16px;
-  padding: 8px 0;
-}
-
-.qb-radio {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-
-.qb-radio input[type="radio"] {
-  accent-color: var(--vp-c-brand-1);
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
-
-.qb-radio-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--vp-c-text-1);
-}
-
-/* ─── Continue button ────────────────────────────────────────────────── */
-.qb-btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 20px;
-  border-radius: 8px;
-  border: none;
-  background: var(--vp-c-brand-1);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, transform 0.1s;
-  font-family: var(--vp-font-family-base);
-}
-
-.qb-btn-primary:hover {
-  background: var(--vp-c-brand-2);
-}
-
-.qb-btn-primary:active {
-  transform: scale(0.98);
-}
-
-.qb-btn-primary svg {
-  width: 16px;
-  height: 16px;
-}
-
-/* ─── Reset button ───────────────────────────────────────────────────── */
-.qb-btn-reset {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 18px;
-  border-radius: 8px;
-  border: 1.5px solid var(--vp-c-divider);
-  background: var(--vp-c-bg-soft);
-  color: var(--vp-c-text-2);
-  font-size: 13.5px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
-  font-family: var(--vp-font-family-base);
-  margin-top: 16px;
-}
-
-.qb-btn-reset:hover {
+.qb-lang-card--selected {
   border-color: var(--vp-c-brand-1);
-  color: var(--vp-c-brand-1);
+  background: var(--vp-c-brand-soft);
 }
 
-.qb-btn-reset svg {
-  width: 15px;
-  height: 15px;
-}
+.qb-lang-icon { font-size: 36px; line-height: 1; }
+.qb-lang-name { font-size: 18px; font-weight: 700; }
+.qb-lang-desc { font-size: 12px; color: var(--vp-c-text-2); text-align: center; }
 
-/* ─── Code output ────────────────────────────────────────────────────── */
-.qb-output {
-  border: 1.5px solid var(--vp-c-divider);
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--vp-c-bg-soft);
-}
-
-.qb-output-header {
+/* ─── Code output ───────────────────────────────────────────────────────────── */
+.qb-code-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--vp-c-divider);
-  background: var(--vp-c-bg);
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
-.qb-output-lang {
+.qb-lang-pill {
   font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--vp-c-text-3);
-}
-
-.qb-copy-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border-radius: 6px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
   border: 1px solid var(--vp-c-divider);
   background: var(--vp-c-bg-soft);
-  color: var(--vp-c-text-2);
+}
+
+.qb-lang-pill--python { color: #2e7d32; border-color: #a5d6a7; background: #f1f8e9; }
+.dark .qb-lang-pill--python { color: #81c784; border-color: #388e3c; background: rgba(56,142,60,0.15); }
+.qb-lang-pill--rust { color: #bf360c; border-color: #ffab91; background: #fbe9e7; }
+.dark .qb-lang-pill--rust { color: #ff7043; border-color: #bf360c; background: rgba(191,54,12,0.15); }
+
+.qb-copy-btn {
+  padding: 6px 16px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--vp-c-brand-1);
+  background: transparent;
+  border: 1px solid var(--vp-c-brand-1);
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s;
-  font-family: var(--vp-font-family-base);
+  white-space: nowrap;
 }
 
-.qb-copy-btn:hover {
-  border-color: var(--vp-c-brand-1);
-  color: var(--vp-c-brand-1);
+.qb-copy-btn:hover { background: var(--vp-c-brand-soft); }
+.qb-copy-btn--done { background: #16a34a; border-color: #16a34a; color: #fff; }
+
+.qb-code-wrap {
+  border-radius: 8px;
+  border: 1px solid var(--vp-c-divider);
+  background: #1a1b26;
+  overflow: auto;
+  max-height: 640px;
 }
 
-.qb-copy-btn--copied {
-  border-color: #22c55e;
-  color: #22c55e;
-  background: rgba(34, 197, 94, 0.08);
-}
-
-.qb-copy-btn svg {
-  width: 13px;
-  height: 13px;
-}
-
-.qb-pre {
+.qb-code {
   margin: 0;
-  padding: 20px;
-  overflow-x: auto;
-  background: transparent;
-  border: none;
-  border-radius: 0;
+  padding: 20px 22px;
+  font-family: var(--vp-font-family-mono, 'JetBrains Mono', monospace);
+  font-size: 13px;
+  line-height: 1.72;
+  color: #cdd6f4;
+  white-space: pre;
+  tab-size: 4;
 }
 
-.qb-pre code {
-  font-family: var(--vp-font-family-mono);
-  font-size: 13.5px;
-  line-height: 1.7;
-  color: var(--vp-c-text-1);
+/* Syntax tokens */
+.qb-code :deep(.hl-keyword)   { color: #cba6f7; }
+.qb-code :deep(.hl-string)    { color: #a6e3a1; }
+.qb-code :deep(.hl-comment)   { color: #6c7086; font-style: italic; }
+.qb-code :deep(.hl-number)    { color: #fab387; }
+.qb-code :deep(.hl-func)      { color: #89b4fa; }
+.qb-code :deep(.hl-builtin)   { color: #94e2d5; }
+.qb-code :deep(.hl-type)      { color: #f38ba8; }
+.qb-code :deep(.hl-macro)     { color: #f9e2af; }
+.qb-code :deep(.hl-decorator) { color: #f5c2e7; }
+
+/* ─── Action buttons ────────────────────────────────────────────────────────── */
+.qb-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+.qb-btn {
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.qb-btn--primary {
+  background: var(--vp-c-brand-1);
+  color: #fff;
+  border-color: var(--vp-c-brand-1);
+}
+
+.qb-btn--primary:hover {
+  background: var(--vp-c-brand-2);
+  border-color: var(--vp-c-brand-2);
+}
+
+.qb-btn--secondary {
   background: transparent;
-  border: none;
-  padding: 0;
-  font-weight: normal;
-  white-space: pre;
-  display: block;
+  color: var(--vp-c-text-2);
+  border-color: var(--vp-c-divider);
+}
+
+.qb-btn--secondary:hover {
+  border-color: var(--vp-c-text-2);
+  color: var(--vp-c-text-1);
+}
+
+.qb-btn--ghost {
+  background: transparent;
+  color: var(--vp-c-brand-1);
+  border-color: var(--vp-c-brand-soft);
+}
+
+.qb-btn--ghost:hover {
+  background: var(--vp-c-brand-soft);
 }
 </style>
