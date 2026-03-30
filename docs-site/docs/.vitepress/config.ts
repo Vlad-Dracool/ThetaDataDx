@@ -22,6 +22,7 @@ export default defineConfig({
     nav: [
       { text: 'Guide', link: '/getting-started/' },
       { text: 'API Reference', link: '/api-reference' },
+      { text: 'Query Builder', link: '/query-builder' },
       { text: 'Tools', link: '/tools/cli' },
       { text: 'Changelog', link: '/changelog' },
       {
@@ -35,6 +36,12 @@ export default defineConfig({
     ],
 
     sidebar: [
+      {
+        text: 'Query Builder',
+        items: [
+          { text: 'Interactive Builder', link: '/query-builder' },
+        ],
+      },
       {
         text: 'Getting Started',
         collapsed: false,
