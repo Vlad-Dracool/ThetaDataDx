@@ -266,8 +266,10 @@ pub struct FpssClient {
     authenticated: Arc<AtomicBool>,
     /// Monotonically increasing request ID counter.
     next_req_id: AtomicI32,
-    /// Active subscriptions for reconnection.
+    /// Active per-contract subscriptions for reconnection.
     active_subs: Mutex<Vec<(SubscriptionKind, Contract)>>,
+    /// Active full-type (firehose) subscriptions for reconnection.
+    active_full_subs: Mutex<Vec<(SubscriptionKind, tdbe::types::enums::SecType)>>,
     /// Server-assigned contract ID mapping.
     contract_map: Arc<Mutex<HashMap<i32, Contract>>>,
     /// The server address we connected to.
@@ -424,6 +426,7 @@ impl FpssClient {
             authenticated,
             next_req_id: AtomicI32::new(1),
             active_subs: Mutex::new(Vec::new()),
+            active_full_subs: Mutex::new(Vec::new()),
             contract_map,
             server_addr,
         })
@@ -495,6 +498,124 @@ impl FpssClient {
             .map_err(|_| Error::Fpss("I/O thread has exited".to_string()))?;
 
         tracing::debug!(req_id, sec_type = ?sec_type, "sent full trade subscription");
+
+        // Track for reconnection
+        {
+            let mut subs = self
+                .active_full_subs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            subs.push((SubscriptionKind::Trade, sec_type));
+        }
+
+        Ok(req_id)
+    }
+
+    /// Subscribe to all open interest data for a security type (full OI stream).
+    ///
+    /// Same pattern as [`subscribe_full_trades`] but for open interest.
+    ///
+    /// # Wire protocol
+    ///
+    /// Sends code 23 (OPEN_INTEREST) with 5-byte payload `[req_id: i32 BE] [sec_type: u8]`.
+    /// The server distinguishes this from per-contract subscriptions by payload length.
+    pub fn subscribe_full_open_interest(
+        &self,
+        sec_type: tdbe::types::enums::SecType,
+    ) -> Result<i32, Error> {
+        self.check_connected()?;
+
+        let req_id = self.next_req_id.fetch_add(1, Ordering::Relaxed);
+        let payload = protocol::build_full_type_subscribe_payload(req_id, sec_type);
+
+        self.cmd_tx
+            .send(IoCommand::WriteFrame {
+                code: StreamMsgType::OpenInterest,
+                payload,
+            })
+            .map_err(|_| Error::Fpss("I/O thread has exited".to_string()))?;
+
+        tracing::debug!(req_id, sec_type = ?sec_type, "sent full open interest subscription");
+
+        // Track for reconnection
+        {
+            let mut subs = self
+                .active_full_subs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            subs.push((SubscriptionKind::OpenInterest, sec_type));
+        }
+
+        Ok(req_id)
+    }
+
+    /// Unsubscribe from all trades for a security type (full trade stream).
+    ///
+    /// # Wire protocol
+    ///
+    /// Sends code 52 (REMOVE_TRADE) with 5-byte payload `[req_id: i32 BE] [sec_type: u8]`.
+    /// Same format as [`subscribe_full_trades`] but with the REMOVE code.
+    pub fn unsubscribe_full_trades(
+        &self,
+        sec_type: tdbe::types::enums::SecType,
+    ) -> Result<i32, Error> {
+        self.check_connected()?;
+
+        let req_id = self.next_req_id.fetch_add(1, Ordering::Relaxed);
+        let payload = protocol::build_full_type_subscribe_payload(req_id, sec_type);
+
+        self.cmd_tx
+            .send(IoCommand::WriteFrame {
+                code: StreamMsgType::RemoveTrade,
+                payload,
+            })
+            .map_err(|_| Error::Fpss("I/O thread has exited".to_string()))?;
+
+        // Remove from tracked subscriptions
+        {
+            let mut subs = self
+                .active_full_subs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            subs.retain(|(k, s)| !(k == &SubscriptionKind::Trade && s == &sec_type));
+        }
+
+        tracing::debug!(req_id, sec_type = ?sec_type, "sent full trade unsubscribe");
+        Ok(req_id)
+    }
+
+    /// Unsubscribe from all open interest for a security type (full OI stream).
+    ///
+    /// # Wire protocol
+    ///
+    /// Sends code 53 (REMOVE_OPEN_INTEREST) with 5-byte payload `[req_id: i32 BE] [sec_type: u8]`.
+    /// Same format as [`subscribe_full_open_interest`] but with the REMOVE code.
+    pub fn unsubscribe_full_open_interest(
+        &self,
+        sec_type: tdbe::types::enums::SecType,
+    ) -> Result<i32, Error> {
+        self.check_connected()?;
+
+        let req_id = self.next_req_id.fetch_add(1, Ordering::Relaxed);
+        let payload = protocol::build_full_type_subscribe_payload(req_id, sec_type);
+
+        self.cmd_tx
+            .send(IoCommand::WriteFrame {
+                code: StreamMsgType::RemoveOpenInterest,
+                payload,
+            })
+            .map_err(|_| Error::Fpss("I/O thread has exited".to_string()))?;
+
+        // Remove from tracked subscriptions
+        {
+            let mut subs = self
+                .active_full_subs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            subs.retain(|(k, s)| !(k == &SubscriptionKind::OpenInterest && s == &sec_type));
+        }
+
+        tracing::debug!(req_id, sec_type = ?sec_type, "sent full open interest unsubscribe");
         Ok(req_id)
     }
 
@@ -622,9 +743,19 @@ impl FpssClient {
             .cloned()
     }
 
-    /// Get a snapshot of currently active subscriptions.
+    /// Get a snapshot of currently active per-contract subscriptions.
     pub fn active_subscriptions(&self) -> Vec<(SubscriptionKind, Contract)> {
         self.active_subs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Get a snapshot of currently active full-type (firehose) subscriptions.
+    pub fn active_full_subscriptions(
+        &self,
+    ) -> Vec<(SubscriptionKind, tdbe::types::enums::SecType)> {
+        self.active_full_subs
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
@@ -1517,6 +1648,7 @@ fn ping_loop(
 pub fn reconnect<F>(
     creds: &Credentials,
     previous_subs: Vec<(SubscriptionKind, Contract)>,
+    previous_full_subs: Vec<(SubscriptionKind, tdbe::types::enums::SecType)>,
     delay_ms: u64,
     ring_size: usize,
     handler: F,
@@ -1529,7 +1661,7 @@ where
 
     let client = FpssClient::connect(creds, ring_size, handler)?;
 
-    // Re-subscribe all previous subscriptions with req_id = -1
+    // Re-subscribe all previous per-contract subscriptions with req_id = -1
     // Source: FPSSClient.java -- reconnect logic uses req_id = -1 for re-subscriptions
     for (kind, contract) in &previous_subs {
         let payload = build_subscribe_payload(-1, contract);
@@ -1547,10 +1679,34 @@ where
         );
     }
 
-    // Store the re-subscribed list
+    // Re-subscribe all previous full-type (firehose) subscriptions with req_id = -1
+    for (kind, sec_type) in &previous_full_subs {
+        let payload = protocol::build_full_type_subscribe_payload(-1, *sec_type);
+        let code = kind.subscribe_code();
+
+        client
+            .cmd_tx
+            .send(IoCommand::WriteFrame { code, payload })
+            .map_err(|_| Error::Fpss("I/O thread exited during reconnect".to_string()))?;
+
+        tracing::debug!(
+            kind = ?kind,
+            sec_type = ?sec_type,
+            "re-subscribed full-type after reconnect (req_id=-1)"
+        );
+    }
+
+    // Store the re-subscribed lists
     {
         let mut subs = client.active_subs.lock().unwrap_or_else(|e| e.into_inner());
         *subs = previous_subs;
+    }
+    {
+        let mut subs = client
+            .active_full_subs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        *subs = previous_full_subs;
     }
 
     Ok(client)

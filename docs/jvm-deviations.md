@@ -29,6 +29,14 @@ As of v1.2.0:
 | **Source** | `FPSSClient` internal event queue | `fpss/mod.rs` | |
 | **Rationale** | Java uses the LMAX Disruptor for mechanical-sympathy event dispatch. Rust uses `disruptor-rs` v4, which directly matches Java's LMAX Disruptor pattern - lock-free, bounded-latency, cache-line-padded sequence counters. The FPSS I/O thread is fully synchronous (no tokio in the streaming hot path). This closes the dispatch-latency gap with the Java terminal. |
 
+### FPSS Ring Buffer Capacity Monitoring (Known Limitation)
+
+| | Java | Rust | Impact |
+|---|---|---|---|
+| **Behavior** | LMAX Disruptor exposes `remainingCapacity()` for back-pressure monitoring | `disruptor-rs` v4 does not expose a fill-level or remaining-capacity API | No capacity warning emitted |
+| **Source** | `FPSSClient` internal queue monitoring | `fpss/mod.rs` I/O loop | |
+| **Rationale** | The Java LMAX Disruptor provides `RingBuffer.remainingCapacity()` which enables logging a warning when the ring is >90% full (indicating the consumer is falling behind). The Rust `disruptor-rs` v4 crate does not expose an equivalent API — `publish()` blocks when full, and `try_batch_publish()` returns `MissingFreeSlots` but only for batch operations. There is no way to query the current fill level. This means the Rust implementation cannot emit a `tracing::warn!` when the ring approaches capacity. The ring buffer still functions correctly (blocking the producer when full), but callers lose the early-warning signal. This is a **known limitation** of the `disruptor-rs` crate, not a design choice. If a future version of `disruptor-rs` exposes capacity information, this gap should be closed. |
+
 ### FIT Codec: Overflow Saturation vs Silent Wrapping
 
 | | Java | Rust | Impact |
@@ -63,6 +71,14 @@ As of v1.2.0:
 | **Read timeout** | `socket.setSoTimeout(10000)` (OS-level) | `tokio::time::timeout` around `read_frame()` | Same 10s timeout |
 | **Auth HTTP** | `HttpURLConnection.setConnectTimeout(5000)` + `setReadTimeout(5000)` | `reqwest::Client` with `connect_timeout(5s)` + `timeout(10s)` | Slightly more generous request timeout |
 | **Rationale** | Java's SO_TIMEOUT is OS-enforced on the socket. Rust's tokio timeout is cooperative. Both achieve the same goal — preventing indefinite hangs. The Rust approach is more flexible (configurable via `DirectConfig`). | |
+
+### DNS Hostname Resolution
+
+| | Java | Rust | Impact |
+|---|---|---|---|
+| **Behavior** | `socket.connect(new InetSocketAddress(host, port))` resolves DNS implicitly | `ToSocketAddrs` resolves DNS via the OS resolver | Identical behavior |
+| **Source** | `FPSSClient.connect()` | `fpss/connection.rs:try_connect()` | |
+| **Rationale** | Java's `InetSocketAddress(host, port)` constructor accepts both IP addresses and hostnames, performing DNS resolution via the JVM's built-in resolver. The Rust implementation uses `ToSocketAddrs`, which resolves DNS via the operating system's resolver (typically `getaddrinfo`). Both approaches support hostnames (e.g., `nj-a.thetadata.us`) and IP addresses transparently. The previous Rust implementation used `SocketAddr::parse()` which would only accept numeric IP addresses — this was corrected to use `ToSocketAddrs` to match Java's behavior of accepting hostnames. |
 
 ### Error Handling: Surfaced vs Silent
 
@@ -154,6 +170,14 @@ As of v1.2.0:
 | **Behavior** | `ArrayBlockingQueue(2)` bounded buffer | `_stream` callback variants process chunks without materializing | More flexible consumer model |
 | **Source** | `MddsClient` response pipeline | `direct.rs: stock_history_trade_stream, option_history_trade_stream, etc.` | |
 | **Rationale** | The `_stream` endpoint variants extend the existing `for_each_chunk` streaming model. They are ideal for endpoints returning millions of rows (e.g., full trade history for a liquid symbol), avoiding unbounded memory growth. The standard `collect_stream` behavior is unchanged. |
+
+### Greeks: Operator Precedence in Higher-Order Greeks
+
+| | Java | Rust | Impact |
+|---|---|---|---|
+| **Behavior** | Decompiled code for veta, speed, zomma, color, and dual_gamma has ambiguous operator precedence | Follows textbook Black-Scholes formulas | Numerically equivalent in practice |
+| **Source** | `Greeks.java` (decompiled) | `crates/tdbe/src/greeks.rs` | |
+| **Rationale** | Java decompilers (CFR, Procyon, FernFlower) lose the original parenthesization when reconstructing expressions from JVM bytecode. The decompiled source for higher-order Greeks (veta, speed, zomma, color, dual_gamma) contains chains of multiplications and divisions where the intended grouping is ambiguous. The Rust implementation follows canonical textbook Black-Scholes formulas for these Greeks. Both implementations may produce identical results — the decompiler may have simply lost parentheses that were present in the original source. This is documented rather than "fixed" because the textbook formulas are the authoritative reference, and all numerical validation tests pass. |
 
 ### Greeks: `.exp()` vs `E.powf()`
 

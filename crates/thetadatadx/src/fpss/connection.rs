@@ -17,7 +17,7 @@
 //! matching the Java `SSLSocketFactory.createSocket()` behavior exactly.
 //! No tokio, no async -- pure blocking I/O on `std::thread`.
 
-use std::net::TcpStream;
+use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -100,9 +100,18 @@ fn try_connect(
     read_timeout: Duration,
 ) -> Result<FpssStream, crate::error::Error> {
     let addr = format!("{host}:{port}");
-    let sock_addr: std::net::SocketAddr = addr
-        .parse()
-        .map_err(|e| crate::error::Error::Fpss(format!("invalid address '{addr}': {e}")))?;
+
+    // Resolve the hostname via the OS DNS resolver. This handles both IP
+    // addresses and hostnames (e.g., "nj-a.thetadata.us:20000"). The
+    // previous implementation used `SocketAddr::parse()` which only
+    // accepts numeric IP addresses and would fail for DNS hostnames.
+    let sock_addr = addr
+        .to_socket_addrs()
+        .map_err(|e| crate::error::Error::Fpss(format!("DNS resolution failed for '{addr}': {e}")))?
+        .next()
+        .ok_or_else(|| {
+            crate::error::Error::Fpss(format!("DNS resolution returned no addresses for '{addr}'"))
+        })?;
 
     // TCP connect with timeout
     let tcp = TcpStream::connect_timeout(&sock_addr, connect_timeout)?;

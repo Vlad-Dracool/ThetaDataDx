@@ -144,6 +144,10 @@ impl ThetaDataDx {
         self.with_streaming(|s| s.subscribe_full_trades(sec_type))
     }
 
+    pub fn subscribe_full_open_interest(&self, sec_type: SecType) -> Result<i32, Error> {
+        self.with_streaming(|s| s.subscribe_full_open_interest(sec_type))
+    }
+
     pub fn unsubscribe_quotes(&self, contract: &Contract) -> Result<i32, Error> {
         self.with_streaming(|s| s.unsubscribe_quotes(contract))
     }
@@ -154,6 +158,14 @@ impl ThetaDataDx {
 
     pub fn unsubscribe_open_interest(&self, contract: &Contract) -> Result<i32, Error> {
         self.with_streaming(|s| s.unsubscribe_open_interest(contract))
+    }
+
+    pub fn unsubscribe_full_trades(&self, sec_type: SecType) -> Result<i32, Error> {
+        self.with_streaming(|s| s.unsubscribe_full_trades(sec_type))
+    }
+
+    pub fn unsubscribe_full_open_interest(&self, sec_type: SecType) -> Result<i32, Error> {
+        self.with_streaming(|s| s.unsubscribe_full_open_interest(sec_type))
     }
 
     pub fn contract_map(&self) -> Result<HashMap<i32, Contract>, Error> {
@@ -168,12 +180,91 @@ impl ThetaDataDx {
         self.with_streaming(|s| Ok(s.active_subscriptions()))
     }
 
+    pub fn active_full_subscriptions(&self) -> Result<Vec<(SubscriptionKind, SecType)>, Error> {
+        self.with_streaming(|s| Ok(s.active_full_subscriptions()))
+    }
+
     /// Shut down the streaming connection. Historical remains available.
     pub fn stop_streaming(&self) {
         let mut guard = self.streaming.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(client) = guard.take() {
             client.shutdown();
         }
+    }
+
+    /// Reconnect the streaming connection, re-subscribing all previous subscriptions.
+    ///
+    /// This is the caller-driven equivalent of Java's `handleInvoluntaryDisconnect()`.
+    /// It saves active subscriptions, stops the current streaming connection,
+    /// starts a new one with the provided handler, and re-subscribes everything.
+    ///
+    /// # Sequence
+    ///
+    /// 1. Save active per-contract and full-type subscriptions
+    /// 2. Stop the current streaming connection
+    /// 3. Start a new streaming connection with the provided handler
+    /// 4. Re-subscribe all saved subscriptions
+    pub fn reconnect_streaming<F>(&self, handler: F) -> Result<(), Error>
+    where
+        F: FnMut(&FpssEvent) + Send + 'static,
+    {
+        // 1. Save active subscriptions before stopping
+        let saved_subs = {
+            let guard = self.streaming.lock().unwrap_or_else(|e| e.into_inner());
+            match guard.as_ref() {
+                Some(client) => (
+                    client.active_subscriptions(),
+                    client.active_full_subscriptions(),
+                ),
+                None => (Vec::new(), Vec::new()),
+            }
+        };
+
+        // 2. Stop streaming
+        self.stop_streaming();
+
+        // 3. Start a new streaming connection
+        self.start_streaming(handler)?;
+
+        // 4. Re-subscribe all saved subscriptions
+        let (per_contract, full_type) = saved_subs;
+
+        for (kind, contract) in &per_contract {
+            let result = match kind {
+                SubscriptionKind::Quote => self.subscribe_quotes(contract),
+                SubscriptionKind::Trade => self.subscribe_trades(contract),
+                SubscriptionKind::OpenInterest => self.subscribe_open_interest(contract),
+            };
+            if let Err(e) = result {
+                tracing::warn!(
+                    kind = ?kind,
+                    contract = %contract,
+                    error = %e,
+                    "failed to re-subscribe after reconnect"
+                );
+            }
+        }
+
+        for (kind, sec_type) in &full_type {
+            let result = match kind {
+                SubscriptionKind::Trade => self.subscribe_full_trades(*sec_type),
+                SubscriptionKind::OpenInterest => self.subscribe_full_open_interest(*sec_type),
+                SubscriptionKind::Quote => {
+                    tracing::warn!("full-type Quote subscription is not supported, skipping");
+                    continue;
+                }
+            };
+            if let Err(e) = result {
+                tracing::warn!(
+                    kind = ?kind,
+                    sec_type = ?sec_type,
+                    error = %e,
+                    "failed to re-subscribe full-type after reconnect"
+                );
+            }
+        }
+
+        Ok(())
     }
 
     /// Access the session UUID from the initial auth.
