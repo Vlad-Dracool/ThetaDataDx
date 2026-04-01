@@ -1987,7 +1987,7 @@ impl DirectClient {
 /// - Shorthand directly: `"1m"`, `"5m"`, `"1h"`
 ///
 /// The server accepts these specific presets:
-/// `1s`, `5s`, `10s`, `15s`, `30s`, `1m`, `5m`, `10m`, `15m`, `30m`, `1h`
+/// `100ms`, `500ms`, `1s`, `5s`, `10s`, `15s`, `30s`, `1m`, `5m`, `10m`, `15m`, `30m`, `1h`
 ///
 /// If milliseconds are passed, they're converted to the nearest matching preset.
 /// If already a valid shorthand (contains 's', 'm', or 'h'), passed through as-is.
@@ -1997,11 +1997,15 @@ fn normalize_interval(interval: &str) -> String {
         return interval.to_string();
     }
 
-    // Try parsing as milliseconds and convert to preset shorthand.
+    // Try parsing as milliseconds and convert to the nearest valid preset.
+    //
+    // Valid presets: 100ms, 500ms, 1s, 5s, 10s, 15s, 30s, 1m, 5m, 10m, 15m, 30m, 1h
     match interval.parse::<u64>() {
         Ok(ms) => match ms {
-            0 => "1s".to_string(), // tick-level -> 1s minimum
-            1..=1000 => "1s".to_string(),
+            0 => "100ms".to_string(),
+            1..=100 => "100ms".to_string(),
+            101..=500 => "500ms".to_string(),
+            501..=1000 => "1s".to_string(),
             1001..=5000 => "5s".to_string(),
             5001..=10000 => "10s".to_string(),
             10001..=15000 => "15s".to_string(),
