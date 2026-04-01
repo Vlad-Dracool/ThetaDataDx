@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0] - 2026-04-01
+
+### Added
+
+- `subscribe_full_open_interest(sec_type)` -- firehose open interest subscription (was missing, Java terminal has it)
+- `unsubscribe_full_trades(sec_type)` -- firehose trade unsubscribe (was missing)
+- `unsubscribe_full_open_interest(sec_type)` -- firehose OI unsubscribe (was missing)
+- `reconnect_streaming(handler)` on `ThetaDataDx` -- saves active subscriptions, stops streaming, restarts with new handler, re-subscribes all per-contract and full-type subscriptions automatically
+- `active_full_subscriptions()` accessor for full-type subscription tracking
+- `docs/java-class-mapping.md` -- complete enumeration of all 588 Java terminal classes with Rust equivalents or justification for exclusion
+
+### Fixed
+
+- DNS hostname resolution in FPSS connection -- `SocketAddr::parse()` replaced with `ToSocketAddrs` to resolve hostnames like `nj-a.thetadata.us` (was silently failing)
+
+### Documented
+
+- Greeks operator precedence (veta, speed, zomma, color, dual_gamma) -- Java decompiler may have lost parenthesization, Rust follows textbook Black-Scholes formulas
+- FPSS ring buffer capacity monitoring -- documented as known limitation (disruptor-rs v4 has no fill-level API)
+
 ## [4.0.0] - 2026-04-01
 
 ### Breaking Changes
@@ -420,7 +440,8 @@ See [TODO.md](TODO.md) for the production readiness checklist and performance ro
 - FIT decoder uses i64 accumulator with i32 saturation (no silent overflow)
 - Price type range enforced with `assert!` in release builds
 
-[Unreleased]: https://github.com/userFRM/ThetaDataDx/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/userFRM/ThetaDataDx/compare/v4.1.0...HEAD
+[4.1.0]: https://github.com/userFRM/ThetaDataDx/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/userFRM/ThetaDataDx/compare/v3.2.2...v4.0.0
 [3.2.2]: https://github.com/userFRM/ThetaDataDx/compare/v3.2.0...v3.2.2
 [3.2.0]: https://github.com/userFRM/ThetaDataDx/compare/v3.1.0...v3.2.0
