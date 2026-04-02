@@ -4,17 +4,80 @@ use crate::error::Error;
 use crate::proto;
 use tdbe::types::tick::*;
 
-/// Helper: find a column index by name, logging a warning if not found.
-/// Returns `None` when the header is missing.
+/// Header aliases: v3 MDDS uses different column names than the tick schema.
+/// This maps schema names to their v3 equivalents so parsers work with both.
+const HEADER_ALIASES: &[(&str, &str)] = &[
+    ("ms_of_day", "timestamp"),
+    ("ms_of_day2", "timestamp2"),
+    ("date", "timestamp"),
+];
+
+/// Helper: find a column index by name, with alias fallback.
+///
+/// The v3 MDDS server uses `timestamp` where the tick schema says `ms_of_day`.
+/// This function checks the primary name first, then falls back to known aliases.
 fn find_header(headers: &[&str], name: &str) -> Option<usize> {
-    let pos = headers.iter().position(|&s| s == name);
-    if pos.is_none() {
-        tracing::warn!(
-            header = name,
-            "expected column header not found in DataTable"
-        );
+    // Try exact match first.
+    if let Some(pos) = headers.iter().position(|&s| s == name) {
+        return Some(pos);
     }
-    pos
+    // Try aliases.
+    for &(schema_name, server_name) in HEADER_ALIASES {
+        if name == schema_name {
+            if let Some(pos) = headers.iter().position(|&s| s == server_name) {
+                return Some(pos);
+            }
+        }
+    }
+    tracing::warn!(
+        header = name,
+        "expected column header not found in DataTable"
+    );
+    None
+}
+
+/// Convert epoch_ms to milliseconds-of-day in Eastern Time.
+///
+/// ThetaData uses New York timezone. EDT = UTC-4, EST = UTC-5.
+/// Approximate with UTC-4 (correct for most trading days Mar-Nov).
+fn timestamp_to_ms_of_day(epoch_ms: u64) -> i32 {
+    let epoch_ms = epoch_ms as i64;
+    let et_offset_ms: i64 = -4 * 3600 * 1000;
+    let local_ms = epoch_ms + et_offset_ms;
+    (local_ms.rem_euclid(86_400_000)) as i32
+}
+
+/// Convert epoch_ms to YYYYMMDD date integer in Eastern Time.
+pub(crate) fn timestamp_to_date(epoch_ms: u64) -> i32 {
+    let epoch_ms = epoch_ms as i64;
+    let et_offset_ms: i64 = -4 * 3600 * 1000;
+    let local_secs = (epoch_ms + et_offset_ms) / 1000;
+    let days = local_secs / 86400 + 719468; // days since 0000-03-01
+    let era = if days >= 0 { days } else { days - 146096 } / 146097;
+    let doe = (days - era * 146097) as u32;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y as i32) * 10000 + (m as i32) * 100 + (d as i32)
+}
+
+/// Extract a date (YYYYMMDD) or ms_of_day from a Timestamp cell.
+///
+/// Used by generated parsers when the `date` field maps to a `timestamp` column.
+pub(crate) fn row_date(row: &proto::DataValueList, idx: usize) -> i32 {
+    row.values
+        .get(idx)
+        .and_then(|dv| dv.data_type.as_ref())
+        .and_then(|dt| match dt {
+            proto::data_value::DataType::Number(n) => Some(*n as i32),
+            proto::data_value::DataType::Timestamp(ts) => Some(timestamp_to_date(ts.epoch_ms)),
+            _ => None,
+        })
+        .unwrap_or(0)
 }
 
 thread_local! {
@@ -174,6 +237,9 @@ pub(crate) fn row_number(row: &proto::DataValueList, idx: usize) -> i32 {
         .and_then(|dv| dv.data_type.as_ref())
         .and_then(|dt| match dt {
             proto::data_value::DataType::Number(n) => Some(*n as i32),
+            // v3 MDDS returns Timestamp for time columns.
+            // Extract milliseconds-of-day (ET timezone).
+            proto::data_value::DataType::Timestamp(ts) => Some(timestamp_to_ms_of_day(ts.epoch_ms)),
             other => {
                 tracing::trace!(
                     column = idx,

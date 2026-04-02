@@ -109,6 +109,9 @@ fn generate_parser(out: &mut String, type_name: &str, def: &TickTypeDef) {
         out.push_str(
             "                crate::proto::data_value::DataType::Price(p) => Some(p.value),\n",
         );
+        out.push_str(
+            "                crate::proto::data_value::DataType::Timestamp(ts) => Some(crate::decode::timestamp_to_date(ts.epoch_ms)),\n",
+        );
         out.push_str("                _ => None,\n");
         out.push_str("            })\n");
         out.push_str("            .unwrap_or(0)\n");
@@ -119,7 +122,16 @@ fn generate_parser(out: &mut String, type_name: &str, def: &TickTypeDef) {
 
     // For eod_style, use a simple closure. For others, use find_header.
     if def.eod_style {
-        out.push_str("    let find = |name: &str| h.iter().position(|&s| s == name);\n\n");
+        out.push_str("    let find = |name: &str| {\n");
+        out.push_str(
+            "        if let Some(pos) = h.iter().position(|&s| s == name) { return Some(pos); }\n",
+        );
+        out.push_str("        // Alias: v3 MDDS uses 'timestamp' for 'ms_of_day' and 'date'.\n");
+        out.push_str("        match name {\n");
+        out.push_str("            \"ms_of_day\" | \"date\" | \"ms_of_day2\" => h.iter().position(|&s| s == \"timestamp\"),\n");
+        out.push_str("            _ => None,\n");
+        out.push_str("        }\n");
+        out.push_str("    };\n\n");
     }
 
     // Determine which columns need the opt_number helper
@@ -299,15 +311,28 @@ fn generate_parser(out: &mut String, type_name: &str, def: &TickTypeDef) {
                         col.field
                     ));
                 } else if is_required {
+                    // Use row_date for `date` fields -- handles Timestamp -> YYYYMMDD.
+                    let accessor = if col.field == "date" {
+                        "row_date"
+                    } else {
+                        "row_number"
+                    };
                     out.push_str(&format!(
-                        "                {}: row_number(row, {var}),\n",
+                        "                {}: {accessor}(row, {var}),\n",
                         col.field
                     ));
                 } else {
-                    out.push_str(&format!(
-                        "                {}: opt_number(row, {var}),\n",
-                        col.field
-                    ));
+                    if col.field == "date" {
+                        out.push_str(&format!(
+                            "                {}: {var}.map(|i| row_date(row, i)).unwrap_or(0),\n",
+                            col.field
+                        ));
+                    } else {
+                        out.push_str(&format!(
+                            "                {}: opt_number(row, {var}),\n",
+                            col.field
+                        ));
+                    }
                 }
             }
             "i64" => {
