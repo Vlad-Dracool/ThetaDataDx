@@ -231,9 +231,7 @@ async fn dispatch_endpoint(
             let sym = get_arg(m, "symbol");
             let date = get_arg(m, "date");
             let interval = get_arg(m, "interval");
-            let ticks = client
-                .stock_history_ohlc(sym, date, interval, None, None)
-                .await?;
+            let ticks = client.stock_history_ohlc(sym, date, interval).await?;
             render_ohlc(&ticks, fmt);
         }
         "stock_history_ohlc_range" => {
@@ -242,31 +240,27 @@ async fn dispatch_endpoint(
             let end = get_arg(m, "end_date");
             let interval = get_arg(m, "interval");
             let ticks = client
-                .stock_history_ohlc_range(sym, start, end, interval, None, None)
+                .stock_history_ohlc_range(sym, start, end, interval)
                 .await?;
             render_ohlc(&ticks, fmt);
         }
         "stock_history_trade" => {
             let sym = get_arg(m, "symbol");
             let date = get_arg(m, "date");
-            let ticks = client.stock_history_trade(sym, date, None, None).await?;
+            let ticks = client.stock_history_trade(sym, date).await?;
             render_trades(&ticks, fmt);
         }
         "stock_history_quote" => {
             let sym = get_arg(m, "symbol");
             let date = get_arg(m, "date");
             let interval = get_arg(m, "interval");
-            let ticks = client
-                .stock_history_quote(sym, date, interval, None, None)
-                .await?;
+            let ticks = client.stock_history_quote(sym, date, interval).await?;
             render_quotes(&ticks, fmt);
         }
         "stock_history_trade_quote" => {
             let sym = get_arg(m, "symbol");
             let date = get_arg(m, "date");
-            let ticks = client
-                .stock_history_trade_quote(sym, date, None, None)
-                .await?;
+            let ticks = client.stock_history_trade_quote(sym, date).await?;
             render_trade_quotes(&ticks, fmt);
         }
 
@@ -408,7 +402,7 @@ async fn dispatch_endpoint(
             let date = get_arg(m, "date");
             let interval = get_arg(m, "interval");
             let ticks = client
-                .option_history_ohlc(sym, exp, strike, right, date, interval, None, None)
+                .option_history_ohlc(sym, exp, strike, right, date, interval)
                 .await?;
             render_ohlc(&ticks, fmt);
         }
@@ -416,7 +410,7 @@ async fn dispatch_endpoint(
             let (sym, exp, strike, right) = option_contract_args(m)?;
             let date = get_arg(m, "date");
             let ticks = client
-                .option_history_trade(sym, exp, strike, right, date, None, None)
+                .option_history_trade(sym, exp, strike, right, date)
                 .await?;
             render_trades(&ticks, fmt);
         }
@@ -425,7 +419,7 @@ async fn dispatch_endpoint(
             let date = get_arg(m, "date");
             let interval = get_arg(m, "interval");
             let ticks = client
-                .option_history_quote(sym, exp, strike, right, date, interval, None, None)
+                .option_history_quote(sym, exp, strike, right, date, interval)
                 .await?;
             render_quotes(&ticks, fmt);
         }
@@ -433,7 +427,7 @@ async fn dispatch_endpoint(
             let (sym, exp, strike, right) = option_contract_args(m)?;
             let date = get_arg(m, "date");
             let ticks = client
-                .option_history_trade_quote(sym, exp, strike, right, date, None, None)
+                .option_history_trade_quote(sym, exp, strike, right, date)
                 .await?;
             render_trade_quotes(&ticks, fmt);
         }
@@ -461,7 +455,7 @@ async fn dispatch_endpoint(
             let date = get_arg(m, "date");
             let interval = get_arg(m, "interval");
             let ticks = client
-                .option_history_greeks_all(sym, exp, strike, right, date, interval, None, None)
+                .option_history_greeks_all(sym, exp, strike, right, date, interval)
                 .await?;
             render_greeks(&ticks, fmt);
         }
@@ -469,7 +463,7 @@ async fn dispatch_endpoint(
             let (sym, exp, strike, right) = option_contract_args(m)?;
             let date = get_arg(m, "date");
             let ticks = client
-                .option_history_trade_greeks_all(sym, exp, strike, right, date, None, None)
+                .option_history_trade_greeks_all(sym, exp, strike, right, date)
                 .await?;
             render_greeks(&ticks, fmt);
         }
@@ -478,9 +472,7 @@ async fn dispatch_endpoint(
             let date = get_arg(m, "date");
             let interval = get_arg(m, "interval");
             let ticks = client
-                .option_history_greeks_first_order(
-                    sym, exp, strike, right, date, interval, None, None,
-                )
+                .option_history_greeks_first_order(sym, exp, strike, right, date, interval)
                 .await?;
             render_greeks(&ticks, fmt);
         }
@@ -488,7 +480,7 @@ async fn dispatch_endpoint(
             let (sym, exp, strike, right) = option_contract_args(m)?;
             let date = get_arg(m, "date");
             let ticks = client
-                .option_history_trade_greeks_first_order(sym, exp, strike, right, date, None, None)
+                .option_history_trade_greeks_first_order(sym, exp, strike, right, date)
                 .await?;
             render_greeks(&ticks, fmt);
         }
@@ -497,9 +489,7 @@ async fn dispatch_endpoint(
             let date = get_arg(m, "date");
             let interval = get_arg(m, "interval");
             let ticks = client
-                .option_history_greeks_second_order(
-                    sym, exp, strike, right, date, interval, None, None,
-                )
+                .option_history_greeks_second_order(sym, exp, strike, right, date, interval)
                 .await?;
             render_greeks(&ticks, fmt);
         }
@@ -507,7 +497,7 @@ async fn dispatch_endpoint(
             let (sym, exp, strike, right) = option_contract_args(m)?;
             let date = get_arg(m, "date");
             let ticks = client
-                .option_history_trade_greeks_second_order(sym, exp, strike, right, date, None, None)
+                .option_history_trade_greeks_second_order(sym, exp, strike, right, date)
                 .await?;
             render_greeks(&ticks, fmt);
         }
@@ -516,9 +506,7 @@ async fn dispatch_endpoint(
             let date = get_arg(m, "date");
             let interval = get_arg(m, "interval");
             let ticks = client
-                .option_history_greeks_third_order(
-                    sym, exp, strike, right, date, interval, None, None,
-                )
+                .option_history_greeks_third_order(sym, exp, strike, right, date, interval)
                 .await?;
             render_greeks(&ticks, fmt);
         }
@@ -526,7 +514,7 @@ async fn dispatch_endpoint(
             let (sym, exp, strike, right) = option_contract_args(m)?;
             let date = get_arg(m, "date");
             let ticks = client
-                .option_history_trade_greeks_third_order(sym, exp, strike, right, date, None, None)
+                .option_history_trade_greeks_third_order(sym, exp, strike, right, date)
                 .await?;
             render_greeks(&ticks, fmt);
         }
@@ -535,9 +523,7 @@ async fn dispatch_endpoint(
             let date = get_arg(m, "date");
             let interval = get_arg(m, "interval");
             let ticks = client
-                .option_history_greeks_implied_volatility(
-                    sym, exp, strike, right, date, interval, None, None,
-                )
+                .option_history_greeks_implied_volatility(sym, exp, strike, right, date, interval)
                 .await?;
             render_iv(&ticks, fmt);
         }
@@ -545,9 +531,7 @@ async fn dispatch_endpoint(
             let (sym, exp, strike, right) = option_contract_args(m)?;
             let date = get_arg(m, "date");
             let ticks = client
-                .option_history_trade_greeks_implied_volatility(
-                    sym, exp, strike, right, date, None, None,
-                )
+                .option_history_trade_greeks_implied_volatility(sym, exp, strike, right, date)
                 .await?;
             render_iv(&ticks, fmt);
         }
@@ -615,18 +599,14 @@ async fn dispatch_endpoint(
             let start = get_arg(m, "start_date");
             let end = get_arg(m, "end_date");
             let interval = get_arg(m, "interval");
-            let ticks = client
-                .index_history_ohlc(sym, start, end, interval, None, None)
-                .await?;
+            let ticks = client.index_history_ohlc(sym, start, end, interval).await?;
             render_ohlc(&ticks, fmt);
         }
         "index_history_price" => {
             let sym = get_arg(m, "symbol");
             let date = get_arg(m, "date");
             let interval = get_arg(m, "interval");
-            let ticks = client
-                .index_history_price(sym, date, interval, None, None)
-                .await?;
+            let ticks = client.index_history_price(sym, date, interval).await?;
             render_price(&ticks, fmt);
         }
 

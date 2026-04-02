@@ -108,6 +108,7 @@ pub mod decode;
 pub mod direct;
 pub mod error;
 pub mod fpss;
+pub mod options;
 pub mod registry;
 pub mod unified;
 
