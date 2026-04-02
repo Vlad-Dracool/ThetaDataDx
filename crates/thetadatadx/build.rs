@@ -126,9 +126,12 @@ fn generate_parser(out: &mut String, type_name: &str, def: &TickTypeDef) {
         out.push_str(
             "        if let Some(pos) = h.iter().position(|&s| s == name) { return Some(pos); }\n",
         );
-        out.push_str("        // Alias: v3 MDDS uses 'timestamp' for 'ms_of_day' and 'date'.\n");
+        out.push_str("        // Alias: v3 MDDS uses different column names.\n");
         out.push_str("        match name {\n");
-        out.push_str("            \"ms_of_day\" | \"date\" | \"ms_of_day2\" => h.iter().position(|&s| s == \"timestamp\"),\n");
+        out.push_str("            \"ms_of_day\" | \"date\" => h.iter().position(|&s| s == \"timestamp\" || s == \"created\"),\n");
+        out.push_str(
+            "            \"ms_of_day2\" => h.iter().position(|&s| s == \"last_trade\"),\n",
+        );
         out.push_str("            _ => None,\n");
         out.push_str("        }\n");
         out.push_str("    };\n\n");

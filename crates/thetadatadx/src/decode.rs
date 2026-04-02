@@ -8,8 +8,11 @@ use tdbe::types::tick::*;
 /// This maps schema names to their v3 equivalents so parsers work with both.
 const HEADER_ALIASES: &[(&str, &str)] = &[
     ("ms_of_day", "timestamp"),
+    ("ms_of_day", "created"),
     ("ms_of_day2", "timestamp2"),
+    ("ms_of_day2", "last_trade"),
     ("date", "timestamp"),
+    ("date", "created"),
 ];
 
 /// Helper: find a column index by name, with alias fallback.
