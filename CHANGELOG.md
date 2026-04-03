@@ -548,8 +548,7 @@ See [TODO.md](TODO.md) for the production readiness checklist and performance ro
 - FIT decoder uses i64 accumulator with i32 saturation (no silent overflow)
 - Price type range enforced with `assert!` in release builds
 
-[Unreleased]: https://github.com/userFRM/ThetaDataDx/compare/v5.0.0...HEAD
-[5.0.0]: https://github.com/userFRM/ThetaDataDx/compare/v4.5.0...v5.0.0
+[Unreleased]: https://github.com/userFRM/ThetaDataDx/compare/v5.0.2...HEAD
 [5.0.2]: https://github.com/userFRM/ThetaDataDx/compare/v5.0.1...v5.0.2
 [5.0.1]: https://github.com/userFRM/ThetaDataDx/compare/v5.0.0...v5.0.1
 [5.0.0]: https://github.com/userFRM/ThetaDataDx/compare/v4.5.0...v5.0.0
