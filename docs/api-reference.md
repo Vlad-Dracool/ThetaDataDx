@@ -919,12 +919,13 @@ All 14 tick types are `Clone + Debug` structs generated from `endpoint_schema.to
 
 > **Note:** Only `expiration` and `strike` support wildcards (`"0"`). The `right` parameter does **not** accept wildcards -- you must specify `"C"` or `"P"`.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `expiration` | `i32` | Contract expiration date (YYYYMMDD). 0 on single-contract queries. |
-| `strike` | `i32` | Strike price (fixed-point encoded). Use `strike_price()` for `f64`. |
-| `right` | `i32` | Contract right: `67` = Call ('C'), `80` = Put ('P'). 0 if absent. |
-| `strike_price_type` | `i32` | Price type for decoding `strike`. |
+| Field | Type (Rust/FFI) | Type (Go) | Description |
+|-------|-----------------|-----------|-------------|
+| `expiration` | `i32` | `int32` | Contract expiration date (YYYYMMDD). 0 on single-contract queries. |
+| `strike` | `i32` | `int32` | Strike price (fixed-point encoded). Use `strike_price()` for `f64`. |
+| `right` | `i32` | `string` | Contract right. Rust/FFI: `67` = Call, `80` = Put, `0` = absent. Go: `"C"`, `"P"`, `""`. |
+| `right_raw` | — | `int32` | Go only: raw integer value (67/80/0) for power users. |
+| `strike_price_type` | `i32` | `int32` | Price type for decoding `strike`. |
 
 Helper methods on all 10 tick types:
 

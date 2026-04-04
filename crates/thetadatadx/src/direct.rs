@@ -367,6 +367,19 @@ macro_rules! streaming_endpoint {
     };
 }
 
+/// Normalize the `right` parameter for the v3 MDDS server.
+///
+/// Accepts: `"C"`, `"P"`, `"call"`, `"put"`, `"both"`, `"*"`.
+/// Maps `"C"` -> `"call"`, `"P"` -> `"put"`, `"*"` -> `"both"`.
+fn normalize_right(right: &str) -> String {
+    match right {
+        "C" | "c" => "call".to_string(),
+        "P" | "p" => "put".to_string(),
+        "*" => "both".to_string(),
+        other => other.to_lowercase(),
+    }
+}
+
 /// Helper: build a `proto::ContractSpec` from the four standard option params.
 macro_rules! contract_spec {
     ($symbol:expr, $expiration:expr, $strike:expr, $right:expr) => {
@@ -374,7 +387,7 @@ macro_rules! contract_spec {
             symbol: $symbol.to_string(),
             expiration: $expiration.to_string(),
             strike: Some($strike.to_string()),
-            right: Some($right.to_string()),
+            right: Some(normalize_right(&$right.to_string())),
         })
     };
 }

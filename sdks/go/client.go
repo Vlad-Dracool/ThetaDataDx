@@ -448,7 +448,8 @@ type EodTick struct {
 	Date           int     `json:"date"`
 	Expiration     int32   `json:"expiration,omitempty"`
 	Strike         int32   `json:"strike,omitempty"`
-	Right          int32   `json:"right,omitempty"`
+	Right          string  `json:"right,omitempty"`
+	RightRaw       int32   `json:"right_raw,omitempty"`
 	StrikePriceType int32  `json:"strike_price_type,omitempty"`
 }
 
@@ -463,7 +464,8 @@ type OhlcTick struct {
 	Date           int     `json:"date"`
 	Expiration     int32   `json:"expiration,omitempty"`
 	Strike         int32   `json:"strike,omitempty"`
-	Right          int32   `json:"right,omitempty"`
+	Right          string  `json:"right,omitempty"`
+	RightRaw       int32   `json:"right_raw,omitempty"`
 	StrikePriceType int32  `json:"strike_price_type,omitempty"`
 }
 
@@ -482,7 +484,8 @@ type TradeTick struct {
 	Date           int     `json:"date"`
 	Expiration     int32   `json:"expiration,omitempty"`
 	Strike         int32   `json:"strike,omitempty"`
-	Right          int32   `json:"right,omitempty"`
+	Right          string  `json:"right,omitempty"`
+	RightRaw       int32   `json:"right_raw,omitempty"`
 	StrikePriceType int32  `json:"strike_price_type,omitempty"`
 }
 
@@ -499,7 +502,8 @@ type QuoteTick struct {
 	Date           int     `json:"date"`
 	Expiration     int32   `json:"expiration,omitempty"`
 	Strike         int32   `json:"strike,omitempty"`
-	Right          int32   `json:"right,omitempty"`
+	Right          string  `json:"right,omitempty"`
+	RightRaw       int32   `json:"right_raw,omitempty"`
 	StrikePriceType int32  `json:"strike_price_type,omitempty"`
 }
 
@@ -526,7 +530,8 @@ type TradeQuoteTick struct {
 	Date           int     `json:"date"`
 	Expiration     int32   `json:"expiration,omitempty"`
 	Strike         int32   `json:"strike,omitempty"`
-	Right          int32   `json:"right,omitempty"`
+	Right          string  `json:"right,omitempty"`
+	RightRaw       int32   `json:"right_raw,omitempty"`
 	StrikePriceType int32  `json:"strike_price_type,omitempty"`
 }
 
@@ -534,9 +539,10 @@ type OpenInterestTick struct {
 	MsOfDay        int   `json:"ms_of_day"`
 	OpenInterest   int   `json:"open_interest"`
 	Date           int   `json:"date"`
-	Expiration     int32 `json:"expiration,omitempty"`
-	Strike         int32 `json:"strike,omitempty"`
-	Right          int32 `json:"right,omitempty"`
+	Expiration     int32  `json:"expiration,omitempty"`
+	Strike         int32  `json:"strike,omitempty"`
+	Right          string `json:"right,omitempty"`
+	RightRaw       int32  `json:"right_raw,omitempty"`
 	StrikePriceType int32 `json:"strike_price_type,omitempty"`
 }
 
@@ -550,7 +556,8 @@ type MarketValueTick struct {
 	Date           int     `json:"date"`
 	Expiration     int32   `json:"expiration,omitempty"`
 	Strike         int32   `json:"strike,omitempty"`
-	Right          int32   `json:"right,omitempty"`
+	Right          string  `json:"right,omitempty"`
+	RightRaw       int32   `json:"right_raw,omitempty"`
 	StrikePriceType int32  `json:"strike_price_type,omitempty"`
 }
 
@@ -581,7 +588,8 @@ type GreeksTick struct {
 	Date           int     `json:"date"`
 	Expiration     int32   `json:"expiration,omitempty"`
 	Strike         int32   `json:"strike,omitempty"`
-	Right          int32   `json:"right,omitempty"`
+	Right          string  `json:"right,omitempty"`
+	RightRaw       int32   `json:"right_raw,omitempty"`
 	StrikePriceType int32  `json:"strike_price_type,omitempty"`
 }
 
@@ -592,7 +600,8 @@ type IVTick struct {
 	Date           int     `json:"date"`
 	Expiration     int32   `json:"expiration,omitempty"`
 	Strike         int32   `json:"strike,omitempty"`
-	Right          int32   `json:"right,omitempty"`
+	Right          string  `json:"right,omitempty"`
+	RightRaw       int32   `json:"right_raw,omitempty"`
 	StrikePriceType int32  `json:"strike_price_type,omitempty"`
 }
 
@@ -627,7 +636,8 @@ type SnapshotTradeTick struct {
 	Date           int     `json:"date"`
 	Expiration     int32   `json:"expiration,omitempty"`
 	Strike         int32   `json:"strike,omitempty"`
-	Right          int32   `json:"right,omitempty"`
+	Right          string  `json:"right,omitempty"`
+	RightRaw       int32   `json:"right_raw,omitempty"`
 	StrikePriceType int32  `json:"strike_price_type,omitempty"`
 }
 
@@ -635,7 +645,8 @@ type OptionContract struct {
 	Root           string `json:"root"`
 	Expiration     int    `json:"expiration"`
 	Strike         int    `json:"strike"`
-	Right          int    `json:"right"`
+	Right          string `json:"right"`
+	RightRaw       int    `json:"right_raw,omitempty"`
 	StrikePriceType int   `json:"strike_price_type"`
 }
 
@@ -664,6 +675,21 @@ type Greeks struct {
 	Lambda    float64 `json:"lambda"`
 }
 
+// ── Right decoding ──
+
+// RightStr converts the raw right code to a string.
+// 67='C' (Call), 80='P' (Put), 0="" (not set).
+func RightStr(code int32) string {
+	switch code {
+	case 67:
+		return "C"
+	case 80:
+		return "P"
+	default:
+		return ""
+	}
+}
+
 // ── Price decoding ──
 
 func priceToFloat(value int32, priceType int32) float64 {
@@ -686,7 +712,7 @@ func convertEodTicks(arr C.TdxTickArray) []EodTick {
 			Open: priceToFloat(t.Open, t.PriceType), High: priceToFloat(t.High, t.PriceType),
 			Low: priceToFloat(t.Low, t.PriceType), Close: priceToFloat(t.Close, t.PriceType),
 			Bid: priceToFloat(t.Bid, t.PriceType), Ask: priceToFloat(t.Ask, t.PriceType),
-			Expiration: t.Expiration, Strike: t.Strike, Right: t.Right, StrikePriceType: t.StrikePriceType,
+			Expiration: t.Expiration, Strike: t.Strike, Right: RightStr(int32(t.Right)), RightRaw: t.Right, StrikePriceType: t.StrikePriceType,
 		}
 	}
 	return result
@@ -702,7 +728,7 @@ func convertOhlcTicks(arr C.TdxTickArray) []OhlcTick {
 			MsOfDay: int(t.MsOfDay), Volume: int(t.Volume), Count: int(t.Count), Date: int(t.Date),
 			Open: priceToFloat(t.Open, t.PriceType), High: priceToFloat(t.High, t.PriceType),
 			Low: priceToFloat(t.Low, t.PriceType), Close: priceToFloat(t.Close, t.PriceType),
-			Expiration: t.Expiration, Strike: t.Strike, Right: t.Right, StrikePriceType: t.StrikePriceType,
+			Expiration: t.Expiration, Strike: t.Strike, Right: RightStr(int32(t.Right)), RightRaw: t.Right, StrikePriceType: t.StrikePriceType,
 		}
 	}
 	return result
@@ -720,7 +746,7 @@ func convertTradeTicks(arr C.TdxTickArray) []TradeTick {
 			PriceRaw: int(t.Price), ConditionFlags: int(t.ConditionFlags),
 			PriceFlags: int(t.PriceFlags), VolumeType: int(t.VolumeType), RecordsBack: int(t.RecordsBack),
 			Date: int(t.Date),
-			Expiration: t.Expiration, Strike: t.Strike, Right: t.Right, StrikePriceType: t.StrikePriceType,
+			Expiration: t.Expiration, Strike: t.Strike, Right: RightStr(int32(t.Right)), RightRaw: t.Right, StrikePriceType: t.StrikePriceType,
 		}
 	}
 	return result
@@ -738,7 +764,7 @@ func convertQuoteTicks(arr C.TdxTickArray) []QuoteTick {
 			AskSize: int(t.AskSize), AskExchange: int(t.AskExchange),
 			Ask: priceToFloat(t.Ask, t.PriceType), AskCondition: int(t.AskCondition),
 			Date: int(t.Date),
-			Expiration: t.Expiration, Strike: t.Strike, Right: t.Right, StrikePriceType: t.StrikePriceType,
+			Expiration: t.Expiration, Strike: t.Strike, Right: RightStr(int32(t.Right)), RightRaw: t.Right, StrikePriceType: t.StrikePriceType,
 		}
 	}
 	return result
@@ -760,7 +786,7 @@ func convertTradeQuoteTicks(arr C.TdxTickArray) []TradeQuoteTick {
 			AskSize: int(t.AskSize), AskExchange: int(t.AskExchange),
 			Ask: priceToFloat(t.Ask, t.QuotePriceType), AskCondition: int(t.AskCondition),
 			Date: int(t.Date),
-			Expiration: t.Expiration, Strike: t.Strike, Right: t.Right, StrikePriceType: t.StrikePriceType,
+			Expiration: t.Expiration, Strike: t.Strike, Right: RightStr(int32(t.Right)), RightRaw: t.Right, StrikePriceType: t.StrikePriceType,
 		}
 	}
 	return result
@@ -774,7 +800,7 @@ func convertOpenInterestTicks(arr C.TdxTickArray) []OpenInterestTick {
 	for i, t := range src {
 		result[i] = OpenInterestTick{
 			MsOfDay: int(t.MsOfDay), OpenInterest: int(t.OpenInterest), Date: int(t.Date),
-			Expiration: t.Expiration, Strike: t.Strike, Right: t.Right, StrikePriceType: t.StrikePriceType,
+			Expiration: t.Expiration, Strike: t.Strike, Right: RightStr(int32(t.Right)), RightRaw: t.Right, StrikePriceType: t.StrikePriceType,
 		}
 	}
 	return result
@@ -789,7 +815,7 @@ func convertMarketValueTicks(arr C.TdxTickArray) []MarketValueTick {
 		result[i] = MarketValueTick{
 			MsOfDay: int(t.MsOfDay), MarketCap: t.MarketCap, SharesOut: t.SharesOutstanding,
 			EntValue: t.EnterpriseValue, BookValue: t.BookValue, FreeFloat: t.FreeFloat, Date: int(t.Date),
-			Expiration: t.Expiration, Strike: t.Strike, Right: t.Right, StrikePriceType: t.StrikePriceType,
+			Expiration: t.Expiration, Strike: t.Strike, Right: RightStr(int32(t.Right)), RightRaw: t.Right, StrikePriceType: t.StrikePriceType,
 		}
 	}
 	return result
@@ -808,7 +834,7 @@ func convertGreeksTicks(arr C.TdxTickArray) []GreeksTick {
 			Speed: t.Speed, Zomma: t.Zomma, Color: t.Color, Ultima: t.Ultima,
 			D1: t.D1, D2: t.D2, DualDelta: t.DualDelta, DualGamma: t.DualGamma,
 			Epsilon: t.Epsilon, Lambda: t.Lambda, Vera: t.Vera, Date: int(t.Date),
-			Expiration: t.Expiration, Strike: t.Strike, Right: t.Right, StrikePriceType: t.StrikePriceType,
+			Expiration: t.Expiration, Strike: t.Strike, Right: RightStr(int32(t.Right)), RightRaw: t.Right, StrikePriceType: t.StrikePriceType,
 		}
 	}
 	return result
@@ -822,7 +848,7 @@ func convertIvTicks(arr C.TdxTickArray) []IVTick {
 	for i, t := range src {
 		result[i] = IVTick{
 			MsOfDay: int(t.MsOfDay), IV: t.ImpliedVolatility, IVError: t.IvError, Date: int(t.Date),
-			Expiration: t.Expiration, Strike: t.Strike, Right: t.Right, StrikePriceType: t.StrikePriceType,
+			Expiration: t.Expiration, Strike: t.Strike, Right: RightStr(int32(t.Right)), RightRaw: t.Right, StrikePriceType: t.StrikePriceType,
 		}
 	}
 	return result
@@ -867,7 +893,7 @@ func convertSnapshotTradeTicks(arr C.TdxTickArray) []SnapshotTradeTick {
 			MsOfDay: int(t.MsOfDay), Sequence: int(t.Sequence), Size: int(t.Size),
 			Condition: int(t.Condition), Price: priceToFloat(t.Price, t.PriceType),
 			PriceRaw: int(t.Price), Date: int(t.Date),
-			Expiration: t.Expiration, Strike: t.Strike, Right: t.Right, StrikePriceType: t.StrikePriceType,
+			Expiration: t.Expiration, Strike: t.Strike, Right: RightStr(int32(t.Right)), RightRaw: t.Right, StrikePriceType: t.StrikePriceType,
 		}
 	}
 	return result
@@ -883,7 +909,7 @@ func convertOptionContracts(arr C.TdxOptionContractArray) []OptionContract {
 		if t.Root != 0 {
 			root = C.GoString((*C.char)(unsafe.Pointer(t.Root)))
 		}
-		result[i] = OptionContract{root, int(t.Expiration), int(t.Strike), int(t.Right), int(t.StrikePriceType)}
+		result[i] = OptionContract{root, int(t.Expiration), int(t.Strike), RightStr(t.Right), int(t.Right), int(t.StrikePriceType)}
 	}
 	return result
 }

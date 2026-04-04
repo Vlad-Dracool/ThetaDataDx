@@ -2323,16 +2323,18 @@ tdx.option_history_quote_stream("SPY", "20241220", "500000", "C", "20240315", "0
 
 ### Contract Identification Fields
 
-10 tick types carry contract identification fields populated by the server on wildcard queries (pass `0` for expiration/strike/right). On single-contract queries these fields are `0`.
+10 tick types carry contract identification fields populated by the server on wildcard queries (pass `0` for expiration/strike). On single-contract queries these fields are `0`/empty.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `expiration` | i32 | Contract expiration (YYYYMMDD). 0 if absent. |
-| `strike` | i32 | Strike price (fixed-point). Use `strike_price()` for decoded float. |
-| `right` | i32 | Contract right: 67 = Call ('C'), 80 = Put ('P'). |
-| `strike_price_type` | i32 | Price type for decoding `strike`. |
+| Field | Type (Rust/FFI) | Type (Go) | Description |
+|-------|-----------------|-----------|-------------|
+| `expiration` | i32 | int32 | Contract expiration (YYYYMMDD). 0 if absent. |
+| `strike` | i32 | int32 | Strike price (fixed-point). Use `strike_price()` for decoded float. |
+| `right` | i32 | string | Contract right. Rust/FFI: 67=Call, 80=Put. Go: `"C"`, `"P"`, `""`. |
+| `right_raw` | — | int32 | Go only: raw integer value (67/80/0) for power users. |
+| `strike_price_type` | i32 | int32 | Price type for decoding `strike`. |
 
 Helper methods (all 10 types): `strike_price()`, `is_call()`, `is_put()`, `has_contract_id()`.
+Go helper: `RightStr(code int32) string` converts raw right codes to `"C"`/`"P"`/`""`.
 
 Types with contract ID: TradeTick, QuoteTick, OhlcTick, EodTick, OpenInterestTick, SnapshotTradeTick, TradeQuoteTick, MarketValueTick, GreeksTick, IvTick.
 
@@ -2357,7 +2359,7 @@ A single trade execution.
 | `date` | i32 | Date as YYYYMMDD integer |
 | `expiration` | i32 | Contract expiration (wildcard queries) |
 | `strike` | i32 | Contract strike (wildcard queries) |
-| `right` | i32 | Contract right C=67/P=80 (wildcard queries) |
+| `right` | i32 (Rust/FFI), string (Go) | Contract right. Rust: C=67/P=80. Go: `"C"`/`"P"`. |
 | `strike_price_type` | i32 | Strike price type (wildcard queries) |
 
 Helper methods: `get_price()`, `is_cancelled()`, `regular_trading_hours()`, `is_seller()`, `is_incremental_volume()`, `strike_price()`, `is_call()`, `is_put()`, `has_contract_id()`
@@ -2375,7 +2377,7 @@ An NBBO quote.
 | `bid_condition` / `ask_condition` | i32 | Condition codes |
 | `price_type` | i32 | Decimal type for price decoding |
 | `date` | i32 | Date as YYYYMMDD integer |
-| `expiration` / `strike` / `right` / `strike_price_type` | i32 | Contract ID (wildcard queries) |
+| `expiration` / `strike` / `right` / `strike_price_type` | i32 (Go: `right` is string) | Contract ID (wildcard queries) |
 
 Helper methods: `bid_price()`, `ask_price()`, `midpoint_price()`, `midpoint_value()`, plus contract ID helpers
 
@@ -2391,7 +2393,7 @@ An aggregated OHLC bar.
 | `count` | i32 | Number of trades in bar |
 | `price_type` | i32 | Decimal type for price decoding |
 | `date` | i32 | Date as YYYYMMDD integer |
-| `expiration` / `strike` / `right` / `strike_price_type` | i32 | Contract ID (wildcard queries) |
+| `expiration` / `strike` / `right` / `strike_price_type` | i32 (Go: `right` is string) | Contract ID (wildcard queries) |
 
 Helper methods: `open_price()`, `high_price()`, `low_price()`, `close_price()`, plus contract ID helpers
 
@@ -2411,7 +2413,7 @@ Full end-of-day snapshot with OHLC + closing quote data.
 | `bid_condition` / `ask_condition` | i32 | Closing quote conditions |
 | `price_type` | i32 | Decimal type |
 | `date` | i32 | Date as YYYYMMDD |
-| `expiration` / `strike` / `right` / `strike_price_type` | i32 | Contract ID (wildcard queries) |
+| `expiration` / `strike` / `right` / `strike_price_type` | i32 (Go: `right` is string) | Contract ID (wildcard queries) |
 
 Helper methods: `open_price()`, `high_price()`, `low_price()`, `close_price()`, `bid_price()`, `ask_price()`, `midpoint_value()`, plus contract ID helpers
 
@@ -2428,7 +2430,7 @@ Helper methods: `trade_price()`, `bid_price()`, `ask_price()`, plus contract ID 
 | `ms_of_day` | i32 | Milliseconds since midnight ET |
 | `open_interest` | i32 | Open interest count |
 | `date` | i32 | Date as YYYYMMDD |
-| `expiration` / `strike` / `right` / `strike_price_type` | i32 | Contract ID (wildcard queries) |
+| `expiration` / `strike` / `right` / `strike_price_type` | i32 (Go: `right` is string) | Contract ID (wildcard queries) |
 
 ### GreeksResult
 
@@ -2495,6 +2497,8 @@ Option right: `Call`, `Put`
 
 - `from_char('C')` / `from_char('P')` - parse from character
 - `as_char()` - convert to `'C'` or `'P'`
+
+**Go SDK:** The `Right` field on all public tick structs is a `string` (`"C"`, `"P"`, or `""`) instead of `i32`. The raw integer value is available as `RightRaw`. Use `RightStr(code int32)` for manual conversion.
 
 ### StreamResponseType
 
