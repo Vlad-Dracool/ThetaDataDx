@@ -16,8 +16,8 @@ pub struct CalendarDay {
 #[derive(Debug, Clone, Copy)]
 #[repr(C, align(64))]
 pub struct EodTick {
-    pub ms_of_day: i32,
-    pub ms_of_day2: i32,
+    pub ms_of_day: i64,
+    pub ms_of_day2: i64,
     pub open: i32,
     pub high: i32,
     pub low: i32,
@@ -496,6 +496,45 @@ impl EodTick {
     pub fn ask_f64(&self) -> f64 {
         self.ask_price().to_f64()
     }
+
+    /// Format `ms_of_day` (epoch_ms) as an ISO 8601 timestamp string.
+    /// e.g. `2024-11-04T17:16:56.205`
+    pub fn created_timestamp(&self) -> String {
+        epoch_ms_to_iso(self.ms_of_day)
+    }
+
+    /// Format `ms_of_day2` (epoch_ms) as an ISO 8601 timestamp string.
+    pub fn last_trade_timestamp(&self) -> String {
+        epoch_ms_to_iso(self.ms_of_day2)
+    }
+}
+
+/// Format epoch milliseconds as `YYYY-MM-DDTHH:MM:SS.mmm` (UTC).
+fn epoch_ms_to_iso(epoch_ms: i64) -> String {
+    if epoch_ms <= 0 {
+        return String::new();
+    }
+    let ms = epoch_ms % 1000;
+    let secs = epoch_ms / 1000;
+    let mins = secs / 60;
+    let s = secs % 60;
+    let hours = mins / 60;
+    let m = mins % 60;
+    let h = hours % 24;
+    // Days since Unix epoch
+    let days = hours / 24;
+    // Civil date (Euclidean algorithm, same as used elsewhere in this crate)
+    let z = days + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = (z - era * 146097) as u32;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let mo = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if mo <= 2 { y + 1 } else { y };
+    format!("{y:04}-{mo:02}-{d:02}T{h:02}:{m:02}:{s:02}.{ms:03}")
 }
 
 impl SnapshotTradeTick {

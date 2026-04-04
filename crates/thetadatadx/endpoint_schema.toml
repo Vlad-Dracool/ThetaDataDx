@@ -107,8 +107,8 @@ parser = "parse_eod_ticks"
 eod_style = true
 required = []
 columns = [
-    { name = "ms_of_day",     field = "ms_of_day",     type = "eod_num" },
-    { name = "ms_of_day2",    field = "ms_of_day2",    type = "eod_num" },
+    { name = "ms_of_day",     field = "ms_of_day",     type = "eod_ts" },
+    { name = "ms_of_day2",    field = "ms_of_day2",    type = "eod_ts" },
     { name = "open",          field = "open",          type = "eod_num" },
     { name = "high",          field = "high",          type = "eod_num" },
     { name = "low",           field = "low",           type = "eod_num" },
