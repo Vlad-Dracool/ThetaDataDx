@@ -235,27 +235,29 @@ defer client.Close()
 
 | Type | Fields | Description |
 |------|--------|-------------|
-| `EodTick` | MsOfDay, Open, High, Low, Close, Volume, Count, Bid, Ask, Date, **Expiration, Strike, Right, StrikePriceType** | End-of-day bar |
-| `OhlcTick` | MsOfDay, Open, High, Low, Close, Volume, Count, Date, **Expiration, Strike, Right, StrikePriceType** | OHLC bar |
-| `TradeTick` | MsOfDay, Sequence, Condition, Size, Exchange, Price (float64), PriceRaw, ConditionFlags, PriceFlags, VolumeType, RecordsBack, Date, **Expiration, Strike, Right, StrikePriceType** | Individual trade |
-| `QuoteTick` | MsOfDay, BidSize, BidExchange, Bid, BidCondition, AskSize, AskExchange, Ask, AskCondition, Date, **Expiration, Strike, Right, StrikePriceType** | NBBO quote |
-| `TradeQuoteTick` | All TradeTick fields + QuoteMsOfDay, BidSize, BidExchange, Bid, BidCondition, AskSize, AskExchange, Ask, AskCondition, Date, **Expiration, Strike, Right, StrikePriceType** | Combined trade+quote |
+| `EodTick` | MsOfDay, Open, High, Low, Close, Volume, Count, Bid, Ask, Date, **Expiration, Strike, Right (string), RightRaw (int32), StrikePriceType** | End-of-day bar |
+| `OhlcTick` | MsOfDay, Open, High, Low, Close, Volume, Count, Date, **Expiration, Strike, Right (string), RightRaw (int32), StrikePriceType** | OHLC bar |
+| `TradeTick` | MsOfDay, Sequence, Condition, Size, Exchange, Price (float64), PriceRaw, ConditionFlags, PriceFlags, VolumeType, RecordsBack, Date, **Expiration, Strike, Right (string), RightRaw (int32), StrikePriceType** | Individual trade |
+| `QuoteTick` | MsOfDay, BidSize, BidExchange, Bid, BidCondition, AskSize, AskExchange, Ask, AskCondition, Date, **Expiration, Strike, Right (string), RightRaw (int32), StrikePriceType** | NBBO quote |
+| `TradeQuoteTick` | All TradeTick fields + QuoteMsOfDay, BidSize, BidExchange, Bid, BidCondition, AskSize, AskExchange, Ask, AskCondition, Date, **Expiration, Strike, Right (string), RightRaw (int32), StrikePriceType** | Combined trade+quote |
 
 #### Derived Types
 
 | Type | Fields | Description |
 |------|--------|-------------|
-| `OpenInterestTick` | MsOfDay, OpenInterest, Date, **Expiration, Strike, Right, StrikePriceType** | Open interest data point |
-| `MarketValueTick` | MsOfDay, MarketCap, SharesOut, EntValue, BookValue, FreeFloat, Date, **Expiration, Strike, Right, StrikePriceType** | Market value data |
-| `GreeksTick` | MsOfDay, Value, Delta, Gamma, Theta, Vega, Rho, IV, IVError, Vanna, Charm, Vomma, Veta, Speed, Zomma, Color, Ultima, D1, D2, DualDelta, DualGamma, Epsilon, Lambda, Date, **Expiration, Strike, Right, StrikePriceType** | Greeks time series |
-| `IVTick` | MsOfDay, IV, IVError, Date, **Expiration, Strike, Right, StrikePriceType** | Implied volatility data point |
-| `SnapshotTradeTick` | MsOfDay, Sequence, Size, Condition, Price (float64), PriceRaw, Date, **Expiration, Strike, Right, StrikePriceType** | Snapshot trade |
+| `OpenInterestTick` | MsOfDay, OpenInterest, Date, **Expiration, Strike, Right (string), RightRaw (int32), StrikePriceType** | Open interest data point |
+| `MarketValueTick` | MsOfDay, MarketCap, SharesOut, EntValue, BookValue, FreeFloat, Date, **Expiration, Strike, Right (string), RightRaw (int32), StrikePriceType** | Market value data |
+| `GreeksTick` | MsOfDay, Value, Delta, Gamma, Theta, Vega, Rho, IV, IVError, Vanna, Charm, Vomma, Veta, Speed, Zomma, Color, Ultima, D1, D2, DualDelta, DualGamma, Epsilon, Lambda, Date, **Expiration, Strike, Right (string), RightRaw (int32), StrikePriceType** | Greeks time series |
+| `IVTick` | MsOfDay, IV, IVError, Date, **Expiration, Strike, Right (string), RightRaw (int32), StrikePriceType** | Implied volatility data point |
+| `SnapshotTradeTick` | MsOfDay, Sequence, Size, Condition, Price (float64), PriceRaw, Date, **Expiration, Strike, Right (string), RightRaw (int32), StrikePriceType** | Snapshot trade |
 | `PriceTick` | MsOfDay, Price (float64), PriceRaw, Date | Price data point (indices) |
 | `CalendarDay` | Date, IsOpen, OpenTime, CloseTime, Status | Market calendar day |
 | `InterestRate` | Date, Rate | Interest rate data point |
-| `Contract` | Symbol, Expiration, Strike, Right | Option contract identifier |
+| `Contract` | Symbol, Expiration, Strike, Right (string), RightRaw | Option contract identifier |
 
-**Contract identification fields** (bold above): `Expiration`, `Strike`, `Right`, `StrikePriceType` are populated by the server on wildcard queries (pass `"0"` for expiration/strike/right). On single-contract queries these fields are `0`.
+**Contract identification fields** (bold above): `Expiration`, `Strike`, `Right`, `StrikePriceType` are populated by the server on wildcard queries (pass `"0"` for expiration/strike). On single-contract queries these fields are zero/empty.
+
+**Right field**: In the Go SDK, `Right` is a human-readable `string` (`"C"` for call, `"P"` for put, `""` if not set). The raw integer value (67/80/0) is available as `RightRaw` for power users who need it. The `RightStr()` helper function performs this conversion and is exported for use with custom data.
 
 ## FPSS Streaming
 

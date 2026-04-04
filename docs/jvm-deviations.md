@@ -275,6 +275,14 @@ As of v1.2.0:
 | **Source** | `TradeRef.java`, `FPSSClient` internal event handling | `fpss/mod.rs:decode_tick()` + `decode_frame()` Trade branch |
 | **Rationale** | The FPSS dev server sends 8-field trade ticks (simple format: `[ms_of_day, sequence, size, condition, price, exchange, price_type, date]`) while production sends 16-field trade ticks (extended format with ext_conditions, flags, volume_type, records_back). Java's `TradeRef.java` hard-codes 8-field indices and applies them to 16-field arrays, producing correct results only by accident when the server happens to send 16-field data with the 8-field subset at matching positions. ThetaDataDx records the actual FIT field count from the first absolute tick for each contract and dispatches to the correct field mapping. Fields absent in the 8-field format (`ext_condition1..4`, `condition_flags`, `price_flags`, `volume_type`, `records_back`) are set to 0. |
 
+### Right Field: String in Go/Python, Integer in Rust/FFI
+
+| | Java | Rust/FFI | Go/Python | Impact |
+|---|---|---|---|---|
+| **Behavior** | Internal `TradeTick` stores right as integer; WebSocket JSON returns string `"C"`/`"P"` | `i32` field on all tick structs (67=Call, 80=Put, 0=absent). `right_str()` helper available. | `string` field (`"C"`, `"P"`, `""`) on all public tick structs. `RightRaw int32` available for power users. | Go/Python consumers get human-readable strings by default |
+| **Source** | Decompiled `TradeRef.java`, `DataValue` protobuf cells | `tdbe` tick structs, `right_str()` in `contract.rs` | `sdks/go/client.go:RightStr()`, conversion functions |
+| **Rationale** | The Java terminal stores right as an integer internally (matching the wire format) but converts to `"C"`/`"P"` when serializing to WebSocket JSON for end-user consumption. ThetaDataDx follows the same principle at the SDK boundary: the Rust core and FFI layer preserve the raw `i32` for zero-overhead C interop, while higher-level SDKs (Go, Python) convert to human-readable strings in the conversion layer. The `RightRaw`/`right_raw` field preserves the original integer for users who need exact wire values. |
+
 ## What Is NOT Different
 
 These are identical to the Java terminal:
