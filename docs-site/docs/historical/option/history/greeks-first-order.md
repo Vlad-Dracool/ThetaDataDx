@@ -14,19 +14,19 @@ Retrieve first-order Greeks (delta, theta, vega, rho, epsilon, lambda) sampled a
 ::: code-group
 ```rust [Rust]
 let g: Vec<GreeksTick> = tdx.option_history_greeks_first_order(
-    "SPY", "20241220", "500000", "C", "20240315", "60000"
+    "SPY", "20241220", "500", "C", "20240315", "60000"
 ).await?;
 ```
 ```python [Python]
-g = tdx.option_history_greeks_first_order("SPY", "20241220", "500000", "C",
+g = tdx.option_history_greeks_first_order("SPY", "20241220", "500", "C",
                                               "20240315", "60000")
 ```
 ```go [Go]
-g, err := client.OptionHistoryGreeksFirstOrder("SPY", "20241220", "500000", "C",
+g, err := client.OptionHistoryGreeksFirstOrder("SPY", "20241220", "500", "C",
     "20240315", "60000")
 ```
 ```cpp [C++]
-auto g = client.option_history_greeks_first_order("SPY", "20241220", "500000", "C",
+auto g = client.option_history_greeks_first_order("SPY", "20241220", "500", "C",
                                                     "20240315", "60000");
 ```
 :::

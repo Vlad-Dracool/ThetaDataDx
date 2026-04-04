@@ -13,16 +13,16 @@ Get the latest OHLC (open, high, low, close) snapshot for an option contract.
 
 ::: code-group
 ```rust [Rust]
-let bars: Vec<OhlcTick> = tdx.option_snapshot_ohlc("SPY", "20241220", "500000", "C").await?;
+let bars: Vec<OhlcTick> = tdx.option_snapshot_ohlc("SPY", "20241220", "500", "C").await?;
 ```
 ```python [Python]
-bars = tdx.option_snapshot_ohlc("SPY", "20241220", "500000", "C")
+bars = tdx.option_snapshot_ohlc("SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-bars, err := client.OptionSnapshotOHLC("SPY", "20241220", "500000", "C")
+bars, err := client.OptionSnapshotOHLC("SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto bars = client.option_snapshot_ohlc("SPY", "20241220", "500000", "C");
+auto bars = client.option_snapshot_ohlc("SPY", "20241220", "500", "C");
 ```
 :::
 
@@ -39,7 +39,7 @@ auto bars = client.option_snapshot_ohlc("SPY", "20241220", "500000", "C");
 </div>
 <div class="param">
 <div class="param-header"><code>strike</code><span class="param-type">string</span><span class="param-badge required">required</span></div>
-<div class="param-desc">Strike price as scaled integer (e.g. <code>"500000"</code> for $500)</div>
+<div class="param-desc">Strike price as scaled integer (e.g. <code>"500"</code> for $500)</div>
 </div>
 <div class="param">
 <div class="param-header"><code>right</code><span class="param-type">string</span><span class="param-badge required">required</span></div>

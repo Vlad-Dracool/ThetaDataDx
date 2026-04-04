@@ -13,16 +13,16 @@ Get a snapshot of all Greeks (first, second, and third order) for an option cont
 
 ::: code-group
 ```rust [Rust]
-let greeks: Vec<GreeksTick> = tdx.option_snapshot_greeks_all("SPY", "20241220", "500000", "C").await?;
+let greeks: Vec<GreeksTick> = tdx.option_snapshot_greeks_all("SPY", "20241220", "500", "C").await?;
 ```
 ```python [Python]
-greeks = tdx.option_snapshot_greeks_all("SPY", "20241220", "500000", "C")
+greeks = tdx.option_snapshot_greeks_all("SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-greeks, err := client.OptionSnapshotGreeksAll("SPY", "20241220", "500000", "C")
+greeks, err := client.OptionSnapshotGreeksAll("SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto greeks = client.option_snapshot_greeks_all("SPY", "20241220", "500000", "C");
+auto greeks = client.option_snapshot_greeks_all("SPY", "20241220", "500", "C");
 ```
 :::
 

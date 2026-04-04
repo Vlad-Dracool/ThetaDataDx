@@ -14,17 +14,17 @@ Get the latest implied volatility (IV) snapshot for an option contract.
 ::: code-group
 ```rust [Rust]
 let iv: Vec<IvTick> = tdx.option_snapshot_greeks_implied_volatility(
-    "SPY", "20241220", "500000", "C"
+    "SPY", "20241220", "500", "C"
 ).await?;
 ```
 ```python [Python]
-iv = tdx.option_snapshot_greeks_implied_volatility("SPY", "20241220", "500000", "C")
+iv = tdx.option_snapshot_greeks_implied_volatility("SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-iv, err := client.OptionSnapshotGreeksIV("SPY", "20241220", "500000", "C")
+iv, err := client.OptionSnapshotGreeksIV("SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto iv = client.option_snapshot_greeks_implied_volatility("SPY", "20241220", "500000", "C");
+auto iv = client.option_snapshot_greeks_implied_volatility("SPY", "20241220", "500", "C");
 ```
 :::
 

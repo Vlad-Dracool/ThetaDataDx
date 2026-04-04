@@ -721,7 +721,7 @@ symbol = "${sym()}"
 date   = "${singleDate()}"
 
 # Get all option contracts that traded on this date
-contracts = tdx.option_list_contracts("EOD", symbol, date)
+contracts = tdx.option_list_contracts("TRADE", symbol, date)
 print(f"Scanning {len(contracts)} contracts...")
 
 unusual = []
@@ -1109,7 +1109,7 @@ function genRust(): string {
     let date   = "${singleDate()}";
 
     // Get all contracts that traded on this date
-    let contracts = tdx.option_list_contracts("EOD", symbol, date).await?;
+    let contracts = tdx.option_list_contracts("TRADE", symbol, date).await?;
     println!("Scanning {} contracts...", contracts.len());
 
     let mut unusual = Vec::new();

@@ -15,7 +15,7 @@ Option contracts are identified by four parameters:
 |-----------|-------------|---------|
 | `symbol` | Underlying ticker | `"SPY"` |
 | `expiration` | Expiration date (`YYYYMMDD`) | `"20241220"` |
-| `strike` | Strike price in tenths of a cent | `"500000"` ($500.00) |
+| `strike` | Strike price in tenths of a cent | `"500"` ($500.00) |
 | `right` | Call or put | `"C"` or `"P"` |
 
 **Wildcard queries:** Pass `"0"` for expiration, strike, and/or right to fetch data across multiple contracts. Each returned tick carries contract identification fields (`expiration`, `strike`, `right`, `strike_price_type`) so you can determine which contract it belongs to. See [Options & Greeks](/options#wildcard-queries-with-contract-identification) for usage examples.
@@ -81,12 +81,12 @@ For endpoints returning millions of rows, the Rust SDK provides `_stream` varian
 
 ```rust
 tdx.option_history_trade_stream(
-    "SPY", "20240419", "500000", "C", "20240315",
+    "SPY", "20240419", "500", "C", "20240315",
     |chunk| { Ok(()) }
 ).await?;
 
 tdx.option_history_quote_stream(
-    "SPY", "20240419", "500000", "C", "20240315", "0",
+    "SPY", "20240419", "500", "C", "20240315", "0",
     |chunk| { Ok(()) }
 ).await?;
 ```

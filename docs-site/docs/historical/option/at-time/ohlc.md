@@ -14,20 +14,20 @@ Retrieve the NBBO quote at a specific time of day across a date range for an opt
 ::: code-group
 ```rust [Rust]
 let quotes: Vec<QuoteTick> = tdx.option_at_time_quote(
-    "SPY", "20241220", "500000", "C",
+    "SPY", "20241220", "500", "C",
     "20240101", "20240301", "34200000"  // 9:30 AM ET
 ).await?;
 ```
 ```python [Python]
-quotes = tdx.option_at_time_quote("SPY", "20241220", "500000", "C",
+quotes = tdx.option_at_time_quote("SPY", "20241220", "500", "C",
                                      "20240101", "20240301", "34200000")
 ```
 ```go [Go]
-quotes, err := client.OptionAtTimeQuote("SPY", "20241220", "500000", "C",
+quotes, err := client.OptionAtTimeQuote("SPY", "20241220", "500", "C",
     "20240101", "20240301", "34200000")
 ```
 ```cpp [C++]
-auto quotes = client.option_at_time_quote("SPY", "20241220", "500000", "C",
+auto quotes = client.option_at_time_quote("SPY", "20241220", "500", "C",
                                            "20240101", "20240301", "34200000");
 ```
 :::

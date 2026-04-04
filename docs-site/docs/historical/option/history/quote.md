@@ -14,19 +14,19 @@ Retrieve NBBO quotes for an option contract, sampled at a specified interval.
 ::: code-group
 ```rust [Rust]
 let quotes: Vec<QuoteTick> = tdx.option_history_quote(
-    "SPY", "20241220", "500000", "C", "20240315", "60000"
+    "SPY", "20241220", "500", "C", "20240315", "60000"
 ).await?;
 ```
 ```python [Python]
-quotes = tdx.option_history_quote("SPY", "20241220", "500000", "C",
+quotes = tdx.option_history_quote("SPY", "20241220", "500", "C",
                                      "20240315", "60000")
 ```
 ```go [Go]
-quotes, err := client.OptionHistoryQuote("SPY", "20241220", "500000", "C",
+quotes, err := client.OptionHistoryQuote("SPY", "20241220", "500", "C",
     "20240315", "60000")
 ```
 ```cpp [C++]
-auto quotes = client.option_history_quote("SPY", "20241220", "500000", "C",
+auto quotes = client.option_history_quote("SPY", "20241220", "500", "C",
                                            "20240315", "60000");
 ```
 :::

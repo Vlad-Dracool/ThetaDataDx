@@ -14,19 +14,19 @@ Retrieve implied volatility history sampled at a given interval throughout a tra
 ::: code-group
 ```rust [Rust]
 let iv: Vec<IvTick> = tdx.option_history_greeks_implied_volatility(
-    "SPY", "20241220", "500000", "C", "20240315", "60000"
+    "SPY", "20241220", "500", "C", "20240315", "60000"
 ).await?;
 ```
 ```python [Python]
-iv = tdx.option_history_greeks_implied_volatility("SPY", "20241220", "500000", "C",
+iv = tdx.option_history_greeks_implied_volatility("SPY", "20241220", "500", "C",
                                                       "20240315", "60000")
 ```
 ```go [Go]
-iv, err := client.OptionHistoryGreeksImpliedVolatility("SPY", "20241220", "500000", "C",
+iv, err := client.OptionHistoryGreeksImpliedVolatility("SPY", "20241220", "500", "C",
     "20240315", "60000")
 ```
 ```cpp [C++]
-auto iv = client.option_history_greeks_implied_volatility("SPY", "20241220", "500000", "C",
+auto iv = client.option_history_greeks_implied_volatility("SPY", "20241220", "500", "C",
                                                             "20240315", "60000");
 ```
 :::

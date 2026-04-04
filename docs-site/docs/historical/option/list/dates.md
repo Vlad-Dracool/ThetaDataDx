@@ -14,17 +14,17 @@ List available dates for a specific option contract, filtered by data request ty
 ::: code-group
 ```rust [Rust]
 let dates: Vec<String> = tdx.option_list_dates(
-    "TRADE", "SPY", "20241220", "500000", "C"
+    "TRADE", "SPY", "20241220", "500", "C"
 ).await?;
 ```
 ```python [Python]
-dates = tdx.option_list_dates("TRADE", "SPY", "20241220", "500000", "C")
+dates = tdx.option_list_dates("TRADE", "SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-dates, err := client.OptionListDates("TRADE", "SPY", "20241220", "500000", "C")
+dates, err := client.OptionListDates("TRADE", "SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto dates = client.option_list_dates("TRADE", "SPY", "20241220", "500000", "C");
+auto dates = client.option_list_dates("TRADE", "SPY", "20241220", "500", "C");
 ```
 :::
 
@@ -45,7 +45,7 @@ auto dates = client.option_list_dates("TRADE", "SPY", "20241220", "500000", "C")
 </div>
 <div class="param">
 <div class="param-header"><code>strike</code><span class="param-type">string</span><span class="param-badge required">required</span></div>
-<div class="param-desc">Strike price as a scaled integer (e.g. <code>"500000"</code> for $500)</div>
+<div class="param-desc">Strike price as a scaled integer (e.g. <code>"500"</code> for $500)</div>
 </div>
 <div class="param">
 <div class="param-header"><code>right</code><span class="param-type">string</span><span class="param-badge required">required</span></div>
@@ -65,4 +65,4 @@ auto dates = client.option_list_dates("TRADE", "SPY", "20241220", "500000", "C")
 ## Notes
 
 - Different request types may have different date availability.
-- Strike prices are expressed in tenths of a cent: `"500000"` = $500.00.
+- Strike prices are expressed in tenths of a cent: `"500"` = $500.00.

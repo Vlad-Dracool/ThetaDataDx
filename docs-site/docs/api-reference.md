@@ -75,22 +75,22 @@ List available dates for a stock by request type.
 
 ::: code-group
 ```rust [Rust]
-let dates = tdx.stock_list_dates("EOD", "AAPL").await?;
+let dates = tdx.stock_list_dates("TRADE", "AAPL").await?;
 ```
 ```python [Python]
-dates = tdx.stock_list_dates("EOD", "AAPL")
+dates = tdx.stock_list_dates("TRADE", "AAPL")
 ```
 ```go [Go]
-dates, err := client.StockListDates("EOD", "AAPL")
+dates, err := client.StockListDates("TRADE", "AAPL")
 ```
 ```cpp [C++]
-auto dates = client.stock_list_dates("EOD", "AAPL");
+auto dates = client.stock_list_dates("TRADE", "AAPL");
 ```
 :::
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `request_type` | string | Yes | Data type: `"EOD"`, `"TRADE"`, `"QUOTE"`, `"OHLC"` |
+| `request_type` | string | Yes | Data type: `"TRADE"`, `"TRADE"`, `"QUOTE"`, `"OHLC"` |
 | `symbol` | string | Yes | Ticker symbol |
 
 **Returns:** List of date strings (`YYYYMMDD`).
@@ -473,7 +473,7 @@ All option endpoints that operate on a specific contract require the contract sp
 
 - `symbol` - Underlying ticker (e.g. `"SPY"`)
 - `expiration` - Expiration date as `YYYYMMDD` string
-- `strike` - Strike price as scaled integer string (e.g. `"500000"` for $500)
+- `strike` - Strike price as scaled integer string (e.g. `"500"` for $500)
 - `right` - `"C"` for call, `"P"` for put
 
 ### option_list_symbols
@@ -507,22 +507,22 @@ List available dates for an option contract by request type.
 
 ::: code-group
 ```rust [Rust]
-let dates = tdx.option_list_dates("EOD", "SPY", "20241220", "500000", "C").await?;
+let dates = tdx.option_list_dates("TRADE", "SPY", "20241220", "500", "C").await?;
 ```
 ```python [Python]
-dates = tdx.option_list_dates("EOD", "SPY", "20241220", "500000", "C")
+dates = tdx.option_list_dates("TRADE", "SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-dates, err := client.OptionListDates("EOD", "SPY", "20241220", "500000", "C")
+dates, err := client.OptionListDates("TRADE", "SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto dates = client.option_list_dates("EOD", "SPY", "20241220", "500000", "C");
+auto dates = client.option_list_dates("TRADE", "SPY", "20241220", "500", "C");
 ```
 :::
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `request_type` | string | Yes | Data type: `"EOD"`, `"TRADE"`, `"QUOTE"`, etc. |
+| `request_type` | string | Yes | Data type: `"TRADE"`, `"TRADE"`, `"QUOTE"`, etc. |
 | `symbol` | string | Yes | Underlying symbol |
 | `expiration` | string | Yes | Expiration date (`YYYYMMDD`) |
 | `strike` | string | Yes | Strike price (scaled integer) |
@@ -593,16 +593,16 @@ List all option contracts for a symbol on a given date.
 
 ::: code-group
 ```rust [Rust]
-let contracts = tdx.option_list_contracts("EOD", "SPY", "20240315").await?;
+let contracts = tdx.option_list_contracts("TRADE", "SPY", "20240315").await?;
 ```
 ```python [Python]
-contracts = tdx.option_list_contracts("EOD", "SPY", "20240315")
+contracts = tdx.option_list_contracts("TRADE", "SPY", "20240315")
 ```
 ```go [Go]
-contracts, err := client.OptionListContracts("EOD", "SPY", "20240315")
+contracts, err := client.OptionListContracts("TRADE", "SPY", "20240315")
 ```
 ```cpp [C++]
-auto contracts = client.option_list_contracts("EOD", "SPY", "20240315");
+auto contracts = client.option_list_contracts("TRADE", "SPY", "20240315");
 ```
 :::
 
@@ -623,16 +623,16 @@ Latest OHLC snapshot for an option contract.
 
 ::: code-group
 ```rust [Rust]
-let bars = tdx.option_snapshot_ohlc("SPY", "20241220", "500000", "C").await?;
+let bars = tdx.option_snapshot_ohlc("SPY", "20241220", "500", "C").await?;
 ```
 ```python [Python]
-bars = tdx.option_snapshot_ohlc("SPY", "20241220", "500000", "C")
+bars = tdx.option_snapshot_ohlc("SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-bars, err := client.OptionSnapshotOHLC("SPY", "20241220", "500000", "C")
+bars, err := client.OptionSnapshotOHLC("SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto bars = client.option_snapshot_ohlc("SPY", "20241220", "500000", "C");
+auto bars = client.option_snapshot_ohlc("SPY", "20241220", "500", "C");
 ```
 :::
 
@@ -656,16 +656,16 @@ Latest trade snapshot for an option contract.
 
 ::: code-group
 ```rust [Rust]
-let trades = tdx.option_snapshot_trade("SPY", "20241220", "500000", "C").await?;
+let trades = tdx.option_snapshot_trade("SPY", "20241220", "500", "C").await?;
 ```
 ```python [Python]
-trades = tdx.option_snapshot_trade("SPY", "20241220", "500000", "C")
+trades = tdx.option_snapshot_trade("SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-trades, err := client.OptionSnapshotTrade("SPY", "20241220", "500000", "C")
+trades, err := client.OptionSnapshotTrade("SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto trades = client.option_snapshot_trade("SPY", "20241220", "500000", "C");
+auto trades = client.option_snapshot_trade("SPY", "20241220", "500", "C");
 ```
 :::
 
@@ -688,16 +688,16 @@ Latest NBBO quote snapshot for an option contract.
 
 ::: code-group
 ```rust [Rust]
-let quotes = tdx.option_snapshot_quote("SPY", "20241220", "500000", "C").await?;
+let quotes = tdx.option_snapshot_quote("SPY", "20241220", "500", "C").await?;
 ```
 ```python [Python]
-quotes = tdx.option_snapshot_quote("SPY", "20241220", "500000", "C")
+quotes = tdx.option_snapshot_quote("SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-quotes, err := client.OptionSnapshotQuote("SPY", "20241220", "500000", "C")
+quotes, err := client.OptionSnapshotQuote("SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto quotes = client.option_snapshot_quote("SPY", "20241220", "500000", "C");
+auto quotes = client.option_snapshot_quote("SPY", "20241220", "500", "C");
 ```
 :::
 
@@ -721,16 +721,16 @@ Latest open interest snapshot for an option contract.
 
 ::: code-group
 ```rust [Rust]
-let oi = tdx.option_snapshot_open_interest("SPY", "20241220", "500000", "C").await?;
+let oi = tdx.option_snapshot_open_interest("SPY", "20241220", "500", "C").await?;
 ```
 ```python [Python]
-oi = tdx.option_snapshot_open_interest("SPY", "20241220", "500000", "C")
+oi = tdx.option_snapshot_open_interest("SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-oi, err := client.OptionSnapshotOpenInterest("SPY", "20241220", "500000", "C")
+oi, err := client.OptionSnapshotOpenInterest("SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto oi = client.option_snapshot_open_interest("SPY", "20241220", "500000", "C");
+auto oi = client.option_snapshot_open_interest("SPY", "20241220", "500", "C");
 ```
 :::
 
@@ -754,16 +754,16 @@ Latest market value snapshot for an option contract.
 
 ::: code-group
 ```rust [Rust]
-let mv = tdx.option_snapshot_market_value("SPY", "20241220", "500000", "C").await?;
+let mv = tdx.option_snapshot_market_value("SPY", "20241220", "500", "C").await?;
 ```
 ```python [Python]
-mv = tdx.option_snapshot_market_value("SPY", "20241220", "500000", "C")
+mv = tdx.option_snapshot_market_value("SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-mv, err := client.OptionSnapshotMarketValue("SPY", "20241220", "500000", "C")
+mv, err := client.OptionSnapshotMarketValue("SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto mv = client.option_snapshot_market_value("SPY", "20241220", "500000", "C");
+auto mv = client.option_snapshot_market_value("SPY", "20241220", "500", "C");
 ```
 :::
 
@@ -787,16 +787,16 @@ Implied volatility snapshot for an option contract.
 
 ::: code-group
 ```rust [Rust]
-let iv = tdx.option_snapshot_greeks_implied_volatility("SPY", "20241220", "500000", "C").await?;
+let iv = tdx.option_snapshot_greeks_implied_volatility("SPY", "20241220", "500", "C").await?;
 ```
 ```python [Python]
-iv = tdx.option_snapshot_greeks_implied_volatility("SPY", "20241220", "500000", "C")
+iv = tdx.option_snapshot_greeks_implied_volatility("SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-iv, err := client.OptionSnapshotGreeksIV("SPY", "20241220", "500000", "C")
+iv, err := client.OptionSnapshotGreeksIV("SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto iv = client.option_snapshot_greeks_implied_volatility("SPY", "20241220", "500000", "C");
+auto iv = client.option_snapshot_greeks_implied_volatility("SPY", "20241220", "500", "C");
 ```
 :::
 
@@ -828,16 +828,16 @@ Snapshot of all Greeks for an option contract.
 
 ::: code-group
 ```rust [Rust]
-let greeks = tdx.option_snapshot_greeks_all("SPY", "20241220", "500000", "C").await?;
+let greeks = tdx.option_snapshot_greeks_all("SPY", "20241220", "500", "C").await?;
 ```
 ```python [Python]
-greeks = tdx.option_snapshot_greeks_all("SPY", "20241220", "500000", "C")
+greeks = tdx.option_snapshot_greeks_all("SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-greeks, err := client.OptionSnapshotGreeksAll("SPY", "20241220", "500000", "C")
+greeks, err := client.OptionSnapshotGreeksAll("SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto greeks = client.option_snapshot_greeks_all("SPY", "20241220", "500000", "C");
+auto greeks = client.option_snapshot_greeks_all("SPY", "20241220", "500", "C");
 ```
 :::
 
@@ -869,16 +869,16 @@ First-order Greeks snapshot (delta, theta, vega, rho, epsilon, lambda).
 
 ::: code-group
 ```rust [Rust]
-let g = tdx.option_snapshot_greeks_first_order("SPY", "20241220", "500000", "C").await?;
+let g = tdx.option_snapshot_greeks_first_order("SPY", "20241220", "500", "C").await?;
 ```
 ```python [Python]
-g = tdx.option_snapshot_greeks_first_order("SPY", "20241220", "500000", "C")
+g = tdx.option_snapshot_greeks_first_order("SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-g, err := client.OptionSnapshotGreeksFirstOrder("SPY", "20241220", "500000", "C")
+g, err := client.OptionSnapshotGreeksFirstOrder("SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto g = client.option_snapshot_greeks_first_order("SPY", "20241220", "500000", "C");
+auto g = client.option_snapshot_greeks_first_order("SPY", "20241220", "500", "C");
 ```
 :::
 
@@ -896,16 +896,16 @@ Second-order Greeks snapshot (gamma, vanna, charm, vomma, veta).
 
 ::: code-group
 ```rust [Rust]
-let g = tdx.option_snapshot_greeks_second_order("SPY", "20241220", "500000", "C").await?;
+let g = tdx.option_snapshot_greeks_second_order("SPY", "20241220", "500", "C").await?;
 ```
 ```python [Python]
-g = tdx.option_snapshot_greeks_second_order("SPY", "20241220", "500000", "C")
+g = tdx.option_snapshot_greeks_second_order("SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-g, err := client.OptionSnapshotGreeksSecondOrder("SPY", "20241220", "500000", "C")
+g, err := client.OptionSnapshotGreeksSecondOrder("SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto g = client.option_snapshot_greeks_second_order("SPY", "20241220", "500000", "C");
+auto g = client.option_snapshot_greeks_second_order("SPY", "20241220", "500", "C");
 ```
 :::
 
@@ -923,16 +923,16 @@ Third-order Greeks snapshot (speed, zomma, color, ultima).
 
 ::: code-group
 ```rust [Rust]
-let g = tdx.option_snapshot_greeks_third_order("SPY", "20241220", "500000", "C").await?;
+let g = tdx.option_snapshot_greeks_third_order("SPY", "20241220", "500", "C").await?;
 ```
 ```python [Python]
-g = tdx.option_snapshot_greeks_third_order("SPY", "20241220", "500000", "C")
+g = tdx.option_snapshot_greeks_third_order("SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-g, err := client.OptionSnapshotGreeksThirdOrder("SPY", "20241220", "500000", "C")
+g, err := client.OptionSnapshotGreeksThirdOrder("SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto g = client.option_snapshot_greeks_third_order("SPY", "20241220", "500000", "C");
+auto g = client.option_snapshot_greeks_third_order("SPY", "20241220", "500", "C");
 ```
 :::
 
@@ -951,17 +951,17 @@ End-of-day option data across a date range.
 ::: code-group
 ```rust [Rust]
 let eod = tdx.option_history_eod(
-    "SPY", "20241220", "500000", "C", "20240101", "20240301"
+    "SPY", "20241220", "500", "C", "20240101", "20240301"
 ).await?;
 ```
 ```python [Python]
-eod = tdx.option_history_eod("SPY", "20241220", "500000", "C", "20240101", "20240301")
+eod = tdx.option_history_eod("SPY", "20241220", "500", "C", "20240101", "20240301")
 ```
 ```go [Go]
-eod, err := client.OptionHistoryEOD("SPY", "20241220", "500000", "C", "20240101", "20240301")
+eod, err := client.OptionHistoryEOD("SPY", "20241220", "500", "C", "20240101", "20240301")
 ```
 ```cpp [C++]
-auto eod = client.option_history_eod("SPY", "20241220", "500000", "C", "20240101", "20240301");
+auto eod = client.option_history_eod("SPY", "20241220", "500", "C", "20240101", "20240301");
 ```
 :::
 
@@ -987,17 +987,17 @@ Intraday OHLC bars for an option contract.
 ::: code-group
 ```rust [Rust]
 let bars = tdx.option_history_ohlc(
-    "SPY", "20241220", "500000", "C", "20240315", "60000"
+    "SPY", "20241220", "500", "C", "20240315", "60000"
 ).await?;
 ```
 ```python [Python]
-bars = tdx.option_history_ohlc("SPY", "20241220", "500000", "C", "20240315", "60000")
+bars = tdx.option_history_ohlc("SPY", "20241220", "500", "C", "20240315", "60000")
 ```
 ```go [Go]
-bars, err := client.OptionHistoryOHLC("SPY", "20241220", "500000", "C", "20240315", "60000")
+bars, err := client.OptionHistoryOHLC("SPY", "20241220", "500", "C", "20240315", "60000")
 ```
 ```cpp [C++]
-auto bars = client.option_history_ohlc("SPY", "20241220", "500000", "C", "20240315", "60000");
+auto bars = client.option_history_ohlc("SPY", "20241220", "500", "C", "20240315", "60000");
 ```
 :::
 
@@ -1023,16 +1023,16 @@ All trades for an option contract on a given date.
 
 ::: code-group
 ```rust [Rust]
-let trades = tdx.option_history_trade("SPY", "20241220", "500000", "C", "20240315").await?;
+let trades = tdx.option_history_trade("SPY", "20241220", "500", "C", "20240315").await?;
 ```
 ```python [Python]
-trades = tdx.option_history_trade("SPY", "20241220", "500000", "C", "20240315")
+trades = tdx.option_history_trade("SPY", "20241220", "500", "C", "20240315")
 ```
 ```go [Go]
-trades, err := client.OptionHistoryTrade("SPY", "20241220", "500000", "C", "20240315")
+trades, err := client.OptionHistoryTrade("SPY", "20241220", "500", "C", "20240315")
 ```
 ```cpp [C++]
-auto trades = client.option_history_trade("SPY", "20241220", "500000", "C", "20240315");
+auto trades = client.option_history_trade("SPY", "20241220", "500", "C", "20240315");
 ```
 :::
 
@@ -1061,17 +1061,17 @@ NBBO quotes for an option contract.
 ::: code-group
 ```rust [Rust]
 let quotes = tdx.option_history_quote(
-    "SPY", "20241220", "500000", "C", "20240315", "60000"
+    "SPY", "20241220", "500", "C", "20240315", "60000"
 ).await?;
 ```
 ```python [Python]
-quotes = tdx.option_history_quote("SPY", "20241220", "500000", "C", "20240315", "60000")
+quotes = tdx.option_history_quote("SPY", "20241220", "500", "C", "20240315", "60000")
 ```
 ```go [Go]
-quotes, err := client.OptionHistoryQuote("SPY", "20241220", "500000", "C", "20240315", "60000")
+quotes, err := client.OptionHistoryQuote("SPY", "20241220", "500", "C", "20240315", "60000")
 ```
 ```cpp [C++]
-auto quotes = client.option_history_quote("SPY", "20241220", "500000", "C", "20240315", "60000");
+auto quotes = client.option_history_quote("SPY", "20241220", "500", "C", "20240315", "60000");
 ```
 :::
 
@@ -1098,16 +1098,16 @@ Combined trade + quote ticks for an option contract.
 
 ::: code-group
 ```rust [Rust]
-let tq = tdx.option_history_trade_quote("SPY", "20241220", "500000", "C", "20240315").await?;
+let tq = tdx.option_history_trade_quote("SPY", "20241220", "500", "C", "20240315").await?;
 ```
 ```python [Python]
-tq = tdx.option_history_trade_quote("SPY", "20241220", "500000", "C", "20240315")
+tq = tdx.option_history_trade_quote("SPY", "20241220", "500", "C", "20240315")
 ```
 ```go [Go]
-tq, err := client.OptionHistoryTradeQuote("SPY", "20241220", "500000", "C", "20240315")
+tq, err := client.OptionHistoryTradeQuote("SPY", "20241220", "500", "C", "20240315")
 ```
 ```cpp [C++]
-auto tq = client.option_history_trade_quote("SPY", "20241220", "500000", "C", "20240315");
+auto tq = client.option_history_trade_quote("SPY", "20241220", "500", "C", "20240315");
 ```
 :::
 
@@ -1136,16 +1136,16 @@ Open interest history for an option contract.
 
 ::: code-group
 ```rust [Rust]
-let oi = tdx.option_history_open_interest("SPY", "20241220", "500000", "C", "20240315").await?;
+let oi = tdx.option_history_open_interest("SPY", "20241220", "500", "C", "20240315").await?;
 ```
 ```python [Python]
-oi = tdx.option_history_open_interest("SPY", "20241220", "500000", "C", "20240315")
+oi = tdx.option_history_open_interest("SPY", "20241220", "500", "C", "20240315")
 ```
 ```go [Go]
-oi, err := client.OptionHistoryOpenInterest("SPY", "20241220", "500000", "C", "20240315")
+oi, err := client.OptionHistoryOpenInterest("SPY", "20241220", "500", "C", "20240315")
 ```
 ```cpp [C++]
-auto oi = client.option_history_open_interest("SPY", "20241220", "500000", "C", "20240315");
+auto oi = client.option_history_open_interest("SPY", "20241220", "500", "C", "20240315");
 ```
 :::
 
@@ -1170,17 +1170,17 @@ End-of-day Greeks history for an option contract.
 ::: code-group
 ```rust [Rust]
 let g = tdx.option_history_greeks_eod(
-    "SPY", "20241220", "500000", "C", "20240101", "20240301"
+    "SPY", "20241220", "500", "C", "20240101", "20240301"
 ).await?;
 ```
 ```python [Python]
-g = tdx.option_history_greeks_eod("SPY", "20241220", "500000", "C", "20240101", "20240301")
+g = tdx.option_history_greeks_eod("SPY", "20241220", "500", "C", "20240101", "20240301")
 ```
 ```go [Go]
-g, err := client.OptionHistoryGreeksEOD("SPY", "20241220", "500000", "C", "20240101", "20240301")
+g, err := client.OptionHistoryGreeksEOD("SPY", "20241220", "500", "C", "20240101", "20240301")
 ```
 ```cpp [C++]
-auto g = client.option_history_greeks_eod("SPY", "20241220", "500000", "C", "20240101", "20240301");
+auto g = client.option_history_greeks_eod("SPY", "20241220", "500", "C", "20240101", "20240301");
 ```
 :::
 
@@ -1213,17 +1213,17 @@ All Greeks history at a given interval (intraday).
 ::: code-group
 ```rust [Rust]
 let g = tdx.option_history_greeks_all(
-    "SPY", "20241220", "500000", "C", "20240315", "60000"
+    "SPY", "20241220", "500", "C", "20240315", "60000"
 ).await?;
 ```
 ```python [Python]
-g = tdx.option_history_greeks_all("SPY", "20241220", "500000", "C", "20240315", "60000")
+g = tdx.option_history_greeks_all("SPY", "20241220", "500", "C", "20240315", "60000")
 ```
 ```go [Go]
-g, err := client.OptionHistoryGreeksAll("SPY", "20241220", "500000", "C", "20240315", "60000")
+g, err := client.OptionHistoryGreeksAll("SPY", "20241220", "500", "C", "20240315", "60000")
 ```
 ```cpp [C++]
-auto g = client.option_history_greeks_all("SPY", "20241220", "500000", "C", "20240315", "60000");
+auto g = client.option_history_greeks_all("SPY", "20241220", "500", "C", "20240315", "60000");
 ```
 :::
 
@@ -1253,16 +1253,16 @@ All Greeks computed on each individual trade.
 
 ::: code-group
 ```rust [Rust]
-let g = tdx.option_history_trade_greeks_all("SPY", "20241220", "500000", "C", "20240315").await?;
+let g = tdx.option_history_trade_greeks_all("SPY", "20241220", "500", "C", "20240315").await?;
 ```
 ```python [Python]
-g = tdx.option_history_trade_greeks_all("SPY", "20241220", "500000", "C", "20240315")
+g = tdx.option_history_trade_greeks_all("SPY", "20241220", "500", "C", "20240315")
 ```
 ```go [Go]
-g, err := client.OptionHistoryTradeGreeksAll("SPY", "20241220", "500000", "C", "20240315")
+g, err := client.OptionHistoryTradeGreeksAll("SPY", "20241220", "500", "C", "20240315")
 ```
 ```cpp [C++]
-auto g = client.option_history_trade_greeks_all("SPY", "20241220", "500000", "C", "20240315");
+auto g = client.option_history_trade_greeks_all("SPY", "20241220", "500", "C", "20240315");
 ```
 :::
 
@@ -1295,17 +1295,17 @@ First-order Greeks history at a given interval.
 ::: code-group
 ```rust [Rust]
 let g = tdx.option_history_greeks_first_order(
-    "SPY", "20241220", "500000", "C", "20240315", "60000"
+    "SPY", "20241220", "500", "C", "20240315", "60000"
 ).await?;
 ```
 ```python [Python]
-g = tdx.option_history_greeks_first_order("SPY", "20241220", "500000", "C", "20240315", "60000")
+g = tdx.option_history_greeks_first_order("SPY", "20241220", "500", "C", "20240315", "60000")
 ```
 ```go [Go]
-g, err := client.OptionHistoryGreeksFirstOrder("SPY", "20241220", "500000", "C", "20240315", "60000")
+g, err := client.OptionHistoryGreeksFirstOrder("SPY", "20241220", "500", "C", "20240315", "60000")
 ```
 ```cpp [C++]
-auto g = client.option_history_greeks_first_order("SPY", "20241220", "500000", "C", "20240315", "60000");
+auto g = client.option_history_greeks_first_order("SPY", "20241220", "500", "C", "20240315", "60000");
 ```
 :::
 
@@ -1324,17 +1324,17 @@ First-order Greeks computed on each individual trade.
 ::: code-group
 ```rust [Rust]
 let g = tdx.option_history_trade_greeks_first_order(
-    "SPY", "20241220", "500000", "C", "20240315"
+    "SPY", "20241220", "500", "C", "20240315"
 ).await?;
 ```
 ```python [Python]
-g = tdx.option_history_trade_greeks_first_order("SPY", "20241220", "500000", "C", "20240315")
+g = tdx.option_history_trade_greeks_first_order("SPY", "20241220", "500", "C", "20240315")
 ```
 ```go [Go]
-g, err := client.OptionHistoryTradeGreeksFirstOrder("SPY", "20241220", "500000", "C", "20240315")
+g, err := client.OptionHistoryTradeGreeksFirstOrder("SPY", "20241220", "500", "C", "20240315")
 ```
 ```cpp [C++]
-auto g = client.option_history_trade_greeks_first_order("SPY", "20241220", "500000", "C", "20240315");
+auto g = client.option_history_trade_greeks_first_order("SPY", "20241220", "500", "C", "20240315");
 ```
 :::
 
@@ -1353,17 +1353,17 @@ Second-order Greeks history at a given interval.
 ::: code-group
 ```rust [Rust]
 let g = tdx.option_history_greeks_second_order(
-    "SPY", "20241220", "500000", "C", "20240315", "60000"
+    "SPY", "20241220", "500", "C", "20240315", "60000"
 ).await?;
 ```
 ```python [Python]
-g = tdx.option_history_greeks_second_order("SPY", "20241220", "500000", "C", "20240315", "60000")
+g = tdx.option_history_greeks_second_order("SPY", "20241220", "500", "C", "20240315", "60000")
 ```
 ```go [Go]
-g, err := client.OptionHistoryGreeksSecondOrder("SPY", "20241220", "500000", "C", "20240315", "60000")
+g, err := client.OptionHistoryGreeksSecondOrder("SPY", "20241220", "500", "C", "20240315", "60000")
 ```
 ```cpp [C++]
-auto g = client.option_history_greeks_second_order("SPY", "20241220", "500000", "C", "20240315", "60000");
+auto g = client.option_history_greeks_second_order("SPY", "20241220", "500", "C", "20240315", "60000");
 ```
 :::
 
@@ -1382,17 +1382,17 @@ Second-order Greeks computed on each individual trade.
 ::: code-group
 ```rust [Rust]
 let g = tdx.option_history_trade_greeks_second_order(
-    "SPY", "20241220", "500000", "C", "20240315"
+    "SPY", "20241220", "500", "C", "20240315"
 ).await?;
 ```
 ```python [Python]
-g = tdx.option_history_trade_greeks_second_order("SPY", "20241220", "500000", "C", "20240315")
+g = tdx.option_history_trade_greeks_second_order("SPY", "20241220", "500", "C", "20240315")
 ```
 ```go [Go]
-g, err := client.OptionHistoryTradeGreeksSecondOrder("SPY", "20241220", "500000", "C", "20240315")
+g, err := client.OptionHistoryTradeGreeksSecondOrder("SPY", "20241220", "500", "C", "20240315")
 ```
 ```cpp [C++]
-auto g = client.option_history_trade_greeks_second_order("SPY", "20241220", "500000", "C", "20240315");
+auto g = client.option_history_trade_greeks_second_order("SPY", "20241220", "500", "C", "20240315");
 ```
 :::
 
@@ -1411,17 +1411,17 @@ Third-order Greeks history at a given interval.
 ::: code-group
 ```rust [Rust]
 let g = tdx.option_history_greeks_third_order(
-    "SPY", "20241220", "500000", "C", "20240315", "60000"
+    "SPY", "20241220", "500", "C", "20240315", "60000"
 ).await?;
 ```
 ```python [Python]
-g = tdx.option_history_greeks_third_order("SPY", "20241220", "500000", "C", "20240315", "60000")
+g = tdx.option_history_greeks_third_order("SPY", "20241220", "500", "C", "20240315", "60000")
 ```
 ```go [Go]
-g, err := client.OptionHistoryGreeksThirdOrder("SPY", "20241220", "500000", "C", "20240315", "60000")
+g, err := client.OptionHistoryGreeksThirdOrder("SPY", "20241220", "500", "C", "20240315", "60000")
 ```
 ```cpp [C++]
-auto g = client.option_history_greeks_third_order("SPY", "20241220", "500000", "C", "20240315", "60000");
+auto g = client.option_history_greeks_third_order("SPY", "20241220", "500", "C", "20240315", "60000");
 ```
 :::
 
@@ -1440,17 +1440,17 @@ Third-order Greeks computed on each individual trade.
 ::: code-group
 ```rust [Rust]
 let g = tdx.option_history_trade_greeks_third_order(
-    "SPY", "20241220", "500000", "C", "20240315"
+    "SPY", "20241220", "500", "C", "20240315"
 ).await?;
 ```
 ```python [Python]
-g = tdx.option_history_trade_greeks_third_order("SPY", "20241220", "500000", "C", "20240315")
+g = tdx.option_history_trade_greeks_third_order("SPY", "20241220", "500", "C", "20240315")
 ```
 ```go [Go]
-g, err := client.OptionHistoryTradeGreeksThirdOrder("SPY", "20241220", "500000", "C", "20240315")
+g, err := client.OptionHistoryTradeGreeksThirdOrder("SPY", "20241220", "500", "C", "20240315")
 ```
 ```cpp [C++]
-auto g = client.option_history_trade_greeks_third_order("SPY", "20241220", "500000", "C", "20240315");
+auto g = client.option_history_trade_greeks_third_order("SPY", "20241220", "500", "C", "20240315");
 ```
 :::
 
@@ -1469,17 +1469,17 @@ Implied volatility history at a given interval.
 ::: code-group
 ```rust [Rust]
 let iv = tdx.option_history_greeks_implied_volatility(
-    "SPY", "20241220", "500000", "C", "20240315", "60000"
+    "SPY", "20241220", "500", "C", "20240315", "60000"
 ).await?;
 ```
 ```python [Python]
-iv = tdx.option_history_greeks_implied_volatility("SPY", "20241220", "500000", "C", "20240315", "60000")
+iv = tdx.option_history_greeks_implied_volatility("SPY", "20241220", "500", "C", "20240315", "60000")
 ```
 ```go [Go]
-iv, err := client.OptionHistoryGreeksImpliedVolatility("SPY", "20241220", "500000", "C", "20240315", "60000")
+iv, err := client.OptionHistoryGreeksImpliedVolatility("SPY", "20241220", "500", "C", "20240315", "60000")
 ```
 ```cpp [C++]
-auto iv = client.option_history_greeks_implied_volatility("SPY", "20241220", "500000", "C", "20240315", "60000");
+auto iv = client.option_history_greeks_implied_volatility("SPY", "20241220", "500", "C", "20240315", "60000");
 ```
 :::
 
@@ -1498,17 +1498,17 @@ Implied volatility computed on each individual trade.
 ::: code-group
 ```rust [Rust]
 let iv = tdx.option_history_trade_greeks_implied_volatility(
-    "SPY", "20241220", "500000", "C", "20240315"
+    "SPY", "20241220", "500", "C", "20240315"
 ).await?;
 ```
 ```python [Python]
-iv = tdx.option_history_trade_greeks_implied_volatility("SPY", "20241220", "500000", "C", "20240315")
+iv = tdx.option_history_trade_greeks_implied_volatility("SPY", "20241220", "500", "C", "20240315")
 ```
 ```go [Go]
-iv, err := client.OptionHistoryTradeGreeksImpliedVolatility("SPY", "20241220", "500000", "C", "20240315")
+iv, err := client.OptionHistoryTradeGreeksImpliedVolatility("SPY", "20241220", "500", "C", "20240315")
 ```
 ```cpp [C++]
-auto iv = client.option_history_trade_greeks_implied_volatility("SPY", "20241220", "500000", "C", "20240315");
+auto iv = client.option_history_trade_greeks_implied_volatility("SPY", "20241220", "500", "C", "20240315");
 ```
 :::
 
@@ -1527,17 +1527,17 @@ Trade at a specific time of day across a date range for an option contract.
 ::: code-group
 ```rust [Rust]
 let trades = tdx.option_at_time_trade(
-    "SPY", "20241220", "500000", "C", "20240101", "20240301", "34200000"
+    "SPY", "20241220", "500", "C", "20240101", "20240301", "34200000"
 ).await?;
 ```
 ```python [Python]
-trades = tdx.option_at_time_trade("SPY", "20241220", "500000", "C", "20240101", "20240301", "34200000")
+trades = tdx.option_at_time_trade("SPY", "20241220", "500", "C", "20240101", "20240301", "34200000")
 ```
 ```go [Go]
-trades, err := client.OptionAtTimeTrade("SPY", "20241220", "500000", "C", "20240101", "20240301", "34200000")
+trades, err := client.OptionAtTimeTrade("SPY", "20241220", "500", "C", "20240101", "20240301", "34200000")
 ```
 ```cpp [C++]
-auto trades = client.option_at_time_trade("SPY", "20241220", "500000", "C", "20240101", "20240301", "34200000");
+auto trades = client.option_at_time_trade("SPY", "20241220", "500", "C", "20240101", "20240301", "34200000");
 ```
 :::
 
@@ -1564,17 +1564,17 @@ Quote at a specific time of day across a date range for an option contract.
 ::: code-group
 ```rust [Rust]
 let quotes = tdx.option_at_time_quote(
-    "SPY", "20241220", "500000", "C", "20240101", "20240301", "34200000"
+    "SPY", "20241220", "500", "C", "20240101", "20240301", "34200000"
 ).await?;
 ```
 ```python [Python]
-quotes = tdx.option_at_time_quote("SPY", "20241220", "500000", "C", "20240101", "20240301", "34200000")
+quotes = tdx.option_at_time_quote("SPY", "20241220", "500", "C", "20240101", "20240301", "34200000")
 ```
 ```go [Go]
-quotes, err := client.OptionAtTimeQuote("SPY", "20241220", "500000", "C", "20240101", "20240301", "34200000")
+quotes, err := client.OptionAtTimeQuote("SPY", "20241220", "500", "C", "20240101", "20240301", "34200000")
 ```
 ```cpp [C++]
-auto quotes = client.option_at_time_quote("SPY", "20241220", "500000", "C", "20240101", "20240301", "34200000");
+auto quotes = client.option_at_time_quote("SPY", "20241220", "500", "C", "20240101", "20240301", "34200000");
 ```
 :::
 
@@ -2304,7 +2304,7 @@ tdx.stock_history_quote_stream("AAPL", "20240315", "0", |quotes: &[QuoteTick]| {
 ### option_history_trade_stream
 
 ```rust
-tdx.option_history_trade_stream("SPY", "20241220", "500000", "C", "20240315", |trades: &[TradeTick]| {
+tdx.option_history_trade_stream("SPY", "20241220", "500", "C", "20240315", |trades: &[TradeTick]| {
     println!("Chunk: {} trades", trades.len());
 }).await?;
 ```
@@ -2312,7 +2312,7 @@ tdx.option_history_trade_stream("SPY", "20241220", "500000", "C", "20240315", |t
 ### option_history_quote_stream
 
 ```rust
-tdx.option_history_quote_stream("SPY", "20241220", "500000", "C", "20240315", "0", |quotes: &[QuoteTick]| {
+tdx.option_history_quote_stream("SPY", "20241220", "500", "C", "20240315", "0", |quotes: &[QuoteTick]| {
     println!("Chunk: {} quotes", quotes.len());
 }).await?;
 ```
@@ -2613,7 +2613,7 @@ All 61 data methods have `_df` variants that return pandas DataFrames directly:
 
 ```python
 df = tdx.stock_history_eod_df("AAPL", "20240101", "20240301")
-df = tdx.option_history_ohlc_df("SPY", "20241220", "500000", "C", "20240315", "60000")
+df = tdx.option_history_ohlc_df("SPY", "20241220", "500", "C", "20240315", "60000")
 ```
 
 Requires `pip install thetadatadx[pandas]`.

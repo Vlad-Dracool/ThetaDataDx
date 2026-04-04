@@ -13,16 +13,16 @@ Get the latest trade snapshot for an option contract.
 
 ::: code-group
 ```rust [Rust]
-let trades: Vec<TradeTick> = tdx.option_snapshot_trade("SPY", "20241220", "500000", "C").await?;
+let trades: Vec<TradeTick> = tdx.option_snapshot_trade("SPY", "20241220", "500", "C").await?;
 ```
 ```python [Python]
-trades = tdx.option_snapshot_trade("SPY", "20241220", "500000", "C")
+trades = tdx.option_snapshot_trade("SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-trades, err := client.OptionSnapshotTrade("SPY", "20241220", "500000", "C")
+trades, err := client.OptionSnapshotTrade("SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto trades = client.option_snapshot_trade("SPY", "20241220", "500000", "C");
+auto trades = client.option_snapshot_trade("SPY", "20241220", "500", "C");
 ```
 :::
 
@@ -39,7 +39,7 @@ auto trades = client.option_snapshot_trade("SPY", "20241220", "500000", "C");
 </div>
 <div class="param">
 <div class="param-header"><code>strike</code><span class="param-type">string</span><span class="param-badge required">required</span></div>
-<div class="param-desc">Strike price as scaled integer (e.g. <code>"500000"</code> for $500)</div>
+<div class="param-desc">Strike price as scaled integer (e.g. <code>"500"</code> for $500)</div>
 </div>
 <div class="param">
 <div class="param-header"><code>right</code><span class="param-type">string</span><span class="param-badge required">required</span></div>

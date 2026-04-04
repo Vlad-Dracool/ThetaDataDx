@@ -14,17 +14,17 @@ Retrieve open interest history for an option contract.
 ::: code-group
 ```rust [Rust]
 let oi: Vec<OpenInterestTick> = tdx.option_history_open_interest(
-    "SPY", "20241220", "500000", "C", "20240315"
+    "SPY", "20241220", "500", "C", "20240315"
 ).await?;
 ```
 ```python [Python]
-oi = tdx.option_history_open_interest("SPY", "20241220", "500000", "C", "20240315")
+oi = tdx.option_history_open_interest("SPY", "20241220", "500", "C", "20240315")
 ```
 ```go [Go]
-oi, err := client.OptionHistoryOpenInterest("SPY", "20241220", "500000", "C", "20240315")
+oi, err := client.OptionHistoryOpenInterest("SPY", "20241220", "500", "C", "20240315")
 ```
 ```cpp [C++]
-auto oi = client.option_history_open_interest("SPY", "20241220", "500000", "C", "20240315");
+auto oi = client.option_history_open_interest("SPY", "20241220", "500", "C", "20240315");
 ```
 :::
 

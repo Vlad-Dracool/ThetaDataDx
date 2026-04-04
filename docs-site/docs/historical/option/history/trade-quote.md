@@ -14,17 +14,17 @@ Retrieve combined trade + quote ticks for an option contract on a given date. Ea
 ::: code-group
 ```rust [Rust]
 let tq: Vec<TradeQuoteTick> = tdx.option_history_trade_quote(
-    "SPY", "20241220", "500000", "C", "20240315"
+    "SPY", "20241220", "500", "C", "20240315"
 ).await?;
 ```
 ```python [Python]
-tq = tdx.option_history_trade_quote("SPY", "20241220", "500000", "C", "20240315")
+tq = tdx.option_history_trade_quote("SPY", "20241220", "500", "C", "20240315")
 ```
 ```go [Go]
-tq, err := client.OptionHistoryTradeQuote("SPY", "20241220", "500000", "C", "20240315")
+tq, err := client.OptionHistoryTradeQuote("SPY", "20241220", "500", "C", "20240315")
 ```
 ```cpp [C++]
-auto tq = client.option_history_trade_quote("SPY", "20241220", "500000", "C", "20240315");
+auto tq = client.option_history_trade_quote("SPY", "20241220", "500", "C", "20240315");
 ```
 :::
 

@@ -13,28 +13,28 @@ description: 14 stock data endpoints - list symbols, snapshots, history, at-time
 let symbols: Vec<String> = tdx.stock_list_symbols().await?;
 
 // Available dates for a stock by request type
-let dates: Vec<String> = tdx.stock_list_dates("EOD", "AAPL").await?;
+let dates: Vec<String> = tdx.stock_list_dates("TRADE", "AAPL").await?;
 ```
 ```python [Python]
 # All available stock symbols
 symbols = tdx.stock_list_symbols()
 
 # Available dates by request type
-dates = tdx.stock_list_dates("EOD", "AAPL")
+dates = tdx.stock_list_dates("TRADE", "AAPL")
 ```
 ```go [Go]
 // All stock symbols
 symbols, _ := client.StockListSymbols()
 
 // Available dates by request type
-dates, _ := client.StockListDates("EOD", "AAPL")
+dates, _ := client.StockListDates("TRADE", "AAPL")
 ```
 ```cpp [C++]
 // All stock symbols
 auto symbols = client.stock_list_symbols();
 
 // Available dates by request type
-auto dates = client.stock_list_dates("EOD", "AAPL");
+auto dates = client.stock_list_dates("TRADE", "AAPL");
 ```
 :::
 

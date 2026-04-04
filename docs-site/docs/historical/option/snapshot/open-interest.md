@@ -13,16 +13,16 @@ Get the latest open interest snapshot for an option contract.
 
 ::: code-group
 ```rust [Rust]
-let oi: Vec<OpenInterestTick> = tdx.option_snapshot_open_interest("SPY", "20241220", "500000", "C").await?;
+let oi: Vec<OpenInterestTick> = tdx.option_snapshot_open_interest("SPY", "20241220", "500", "C").await?;
 ```
 ```python [Python]
-oi = tdx.option_snapshot_open_interest("SPY", "20241220", "500000", "C")
+oi = tdx.option_snapshot_open_interest("SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-oi, err := client.OptionSnapshotOpenInterest("SPY", "20241220", "500000", "C")
+oi, err := client.OptionSnapshotOpenInterest("SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto oi = client.option_snapshot_open_interest("SPY", "20241220", "500000", "C");
+auto oi = client.option_snapshot_open_interest("SPY", "20241220", "500", "C");
 ```
 :::
 

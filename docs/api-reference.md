@@ -629,7 +629,7 @@ pub fn option_history_trade_stream(
 Process all trades for an option contract, one chunk at a time. gRPC: `GetOptionHistoryTrade`
 
 ```rust
-let builder = tdx.option_history_trade_stream("SPY", "20261220", "500000", "C", "20260401");
+let builder = tdx.option_history_trade_stream("SPY", "20261220", "500", "C", "20260401");
 builder.stream(|chunk: &[TradeTick]| {
     // process chunk
 })?;
@@ -645,7 +645,7 @@ pub fn option_history_quote_stream(
 Process quotes for an option contract, one chunk at a time. gRPC: `GetOptionHistoryQuote`
 
 ```rust
-let builder = tdx.option_history_quote_stream("SPY", "20261220", "500000", "C", "20260401", "1m");
+let builder = tdx.option_history_quote_stream("SPY", "20261220", "500", "C", "20260401", "1m");
 builder.stream(|chunk: &[QuoteTick]| {
     // process chunk
 })?;

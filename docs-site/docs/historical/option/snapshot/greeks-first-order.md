@@ -14,17 +14,17 @@ Get a snapshot of first-order Greeks for an option contract: delta, theta, vega,
 ::: code-group
 ```rust [Rust]
 let g: Vec<GreeksTick> = tdx.option_snapshot_greeks_first_order(
-    "SPY", "20241220", "500000", "C"
+    "SPY", "20241220", "500", "C"
 ).await?;
 ```
 ```python [Python]
-g = tdx.option_snapshot_greeks_first_order("SPY", "20241220", "500000", "C")
+g = tdx.option_snapshot_greeks_first_order("SPY", "20241220", "500", "C")
 ```
 ```go [Go]
-g, err := client.OptionSnapshotGreeksFirstOrder("SPY", "20241220", "500000", "C")
+g, err := client.OptionSnapshotGreeksFirstOrder("SPY", "20241220", "500", "C")
 ```
 ```cpp [C++]
-auto g = client.option_snapshot_greeks_first_order("SPY", "20241220", "500000", "C");
+auto g = client.option_snapshot_greeks_first_order("SPY", "20241220", "500", "C");
 ```
 :::
 

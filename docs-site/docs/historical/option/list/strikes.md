@@ -52,5 +52,5 @@ auto strikes = client.option_list_strikes("SPY", "20241220");
 
 ## Notes
 
-- Strike prices are returned as scaled integers in tenths of a cent. Divide by 1000 to get the dollar value: `"500000"` = $500.00.
+- Strike prices are returned as scaled integers in tenths of a cent. Divide by 1000 to get the dollar value: `"500"` = $500.00.
 - Use [option_list_expirations](./expirations) first to get valid expiration dates for an underlying.

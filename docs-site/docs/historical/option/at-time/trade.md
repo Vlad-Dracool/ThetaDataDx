@@ -14,20 +14,20 @@ Retrieve the trade at a specific time of day across a date range for an option c
 ::: code-group
 ```rust [Rust]
 let trades: Vec<TradeTick> = tdx.option_at_time_trade(
-    "SPY", "20241220", "500000", "C",
+    "SPY", "20241220", "500", "C",
     "20240101", "20240301", "34200000"  // 9:30 AM ET
 ).await?;
 ```
 ```python [Python]
-trades = tdx.option_at_time_trade("SPY", "20241220", "500000", "C",
+trades = tdx.option_at_time_trade("SPY", "20241220", "500", "C",
                                      "20240101", "20240301", "34200000")
 ```
 ```go [Go]
-trades, err := client.OptionAtTimeTrade("SPY", "20241220", "500000", "C",
+trades, err := client.OptionAtTimeTrade("SPY", "20241220", "500", "C",
     "20240101", "20240301", "34200000")
 ```
 ```cpp [C++]
-auto trades = client.option_at_time_trade("SPY", "20241220", "500000", "C",
+auto trades = client.option_at_time_trade("SPY", "20241220", "500", "C",
                                            "20240101", "20240301", "34200000");
 ```
 :::

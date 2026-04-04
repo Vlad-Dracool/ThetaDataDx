@@ -14,19 +14,19 @@ Retrieve end-of-day Greeks history for an option contract across a date range.
 ::: code-group
 ```rust [Rust]
 let g: Vec<GreeksTick> = tdx.option_history_greeks_eod(
-    "SPY", "20241220", "500000", "C", "20240101", "20240301"
+    "SPY", "20241220", "500", "C", "20240101", "20240301"
 ).await?;
 ```
 ```python [Python]
-g = tdx.option_history_greeks_eod("SPY", "20241220", "500000", "C",
+g = tdx.option_history_greeks_eod("SPY", "20241220", "500", "C",
                                       "20240101", "20240301")
 ```
 ```go [Go]
-g, err := client.OptionHistoryGreeksEOD("SPY", "20241220", "500000", "C",
+g, err := client.OptionHistoryGreeksEOD("SPY", "20241220", "500", "C",
     "20240101", "20240301")
 ```
 ```cpp [C++]
-auto g = client.option_history_greeks_eod("SPY", "20241220", "500000", "C",
+auto g = client.option_history_greeks_eod("SPY", "20241220", "500", "C",
                                            "20240101", "20240301");
 ```
 :::

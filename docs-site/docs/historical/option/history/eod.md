@@ -14,7 +14,7 @@ Retrieve end-of-day option data across a date range. Returns one row per trading
 ::: code-group
 ```rust [Rust]
 let eod: Vec<EodTick> = tdx.option_history_eod(
-    "SPY", "20241220", "500000", "C", "20240101", "20240301"
+    "SPY", "20241220", "500", "C", "20240101", "20240301"
 ).await?;
 for t in &eod {
     println!("{}: O={} H={} L={} C={}", t.date, t.open_price(), t.high_price(),
@@ -22,15 +22,15 @@ for t in &eod {
 }
 ```
 ```python [Python]
-eod = tdx.option_history_eod("SPY", "20241220", "500000", "C",
+eod = tdx.option_history_eod("SPY", "20241220", "500", "C",
                                 "20240101", "20240301")
 ```
 ```go [Go]
-eod, err := client.OptionHistoryEOD("SPY", "20241220", "500000", "C",
+eod, err := client.OptionHistoryEOD("SPY", "20241220", "500", "C",
     "20240101", "20240301")
 ```
 ```cpp [C++]
-auto eod = client.option_history_eod("SPY", "20241220", "500000", "C",
+auto eod = client.option_history_eod("SPY", "20241220", "500", "C",
                                       "20240101", "20240301");
 ```
 :::

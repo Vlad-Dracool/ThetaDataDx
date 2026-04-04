@@ -14,17 +14,17 @@ Retrieve first-order Greeks computed on each individual trade for an option cont
 ::: code-group
 ```rust [Rust]
 let g: Vec<GreeksTick> = tdx.option_history_trade_greeks_first_order(
-    "SPY", "20241220", "500000", "C", "20240315"
+    "SPY", "20241220", "500", "C", "20240315"
 ).await?;
 ```
 ```python [Python]
-g = tdx.option_history_trade_greeks_first_order("SPY", "20241220", "500000", "C", "20240315")
+g = tdx.option_history_trade_greeks_first_order("SPY", "20241220", "500", "C", "20240315")
 ```
 ```go [Go]
-g, err := client.OptionHistoryTradeGreeksFirstOrder("SPY", "20241220", "500000", "C", "20240315")
+g, err := client.OptionHistoryTradeGreeksFirstOrder("SPY", "20241220", "500", "C", "20240315")
 ```
 ```cpp [C++]
-auto g = client.option_history_trade_greeks_first_order("SPY", "20241220", "500000", "C",
+auto g = client.option_history_trade_greeks_first_order("SPY", "20241220", "500", "C",
                                                           "20240315");
 ```
 :::
