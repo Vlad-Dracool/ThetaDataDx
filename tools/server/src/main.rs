@@ -83,6 +83,10 @@ struct Args {
     /// Skip FPSS (streaming) connection at startup.
     #[arg(long)]
     no_fpss: bool,
+
+    /// Disable OHLCVC bar derivation from trades on the FPSS stream.
+    #[arg(long)]
+    no_ohlcvc: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +153,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "stage" => DirectConfig::stage(),
             _ => DirectConfig::production(),
         }
+    };
+
+    // Step 2b: Apply CLI overrides to config.
+    let config = if args.no_ohlcvc {
+        config.derive_ohlcvc(false)
+    } else {
+        config
     };
 
     // Step 3: Connect unified client (gRPC historical).
