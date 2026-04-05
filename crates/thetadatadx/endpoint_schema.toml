@@ -249,16 +249,23 @@ columns = [
 ]
 
 [types.IvTick]
-doc = "Implied volatility tick -- 4 fields."
+doc = "Implied volatility tick from option_history_greeks_implied_volatility (full server data)"
 copy = true
 align = 64
 contract_id = true
 parser = "parse_iv_ticks"
 required = ["ms_of_day"]
 columns = [
-    { name = "ms_of_day",          field = "ms_of_day",          type = "i32" },
+    { name = "ms_of_day",          field = "ms_of_day",          type = "timestamp" },
     { name = "implied_volatility", field = "implied_volatility", type = "f64" },
-    { name = "iv_error",           field = "iv_error",           type = "f64" },
+    { name = "iv_error",             field = "iv_error",           type = "f64" },
+    { name = "bid",                 field = "bid",                 type = "f64" },
+    { name = "bid_implied_vol",     field = "bid_implied_vol",     type = "f64" },
+    { name = "midpoint",            field = "midpoint",            type = "f64" },
+    { name = "ask",                 field = "ask",                 type = "f64" },
+    { name = "ask_implied_vol",     field = "ask_implied_vol",     type = "f64" },
+    { name = "underlying_timestamp",field = "underlying_timestamp",type = "timestamp" },
+    { name = "underlying_price",    field = "underlying_price",    type = "f64" },
     { name = "date",               field = "date",               type = "i32" },
 ]
 

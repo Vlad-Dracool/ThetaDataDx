@@ -97,6 +97,33 @@ fn generate_parser(out: &mut String, type_name: &str, def: &TickTypeDef) {
         "pub fn {fn_name}(table: &crate::proto::DataTable) -> Vec<{type_name}> {{\n"
     ));
 
+    // ==================== UNIVERSAL DEBUG FOR ALL TABLES ====================
+    // Prints real headers + raw rows for ANY endpoint when TDX_DEBUG_HEADERS=1
+    out.push_str("    if std::env::var_os(\"TDX_DEBUG_HEADERS\").is_some() {\n");
+    out.push_str(&format!(
+        "        println!(\"\\n==================== DEBUG TABLE ====================\");\n",
+        
+    ));
+    out.push_str("        println!(\"HEADERS ({} total):\", table.headers.len());\n");
+    out.push_str("        for (i, header) in table.headers.iter().enumerate() {\n");
+    out.push_str("            println!(\"  {:2} | {}\", i, header);\n");
+    out.push_str("        }\n");
+    out.push_str("\n");
+    out.push_str("        println!(\"\\n=== FIRST 5 RAW ROWS ===\");\n");
+    out.push_str("        for (row_idx, row) in table.data_table.iter().take(5).enumerate() {\n");
+    out.push_str("            println!(\"\\n--- ROW {} ({} values) ---\", row_idx, row.values.len());\n");
+    out.push_str("            for (j, val) in row.values.iter().enumerate() {\n");
+    out.push_str("                let header = table.headers.get(j).map(|s| s.as_str()).unwrap_or(\"UNKNOWN\");\n");
+    out.push_str("                match &val.data_type {\n");
+    out.push_str("                    Some(dt) => println!(\"  {}: {:?}\", header, dt),\n");
+    out.push_str("                    None => println!(\"  {}: NULL\", header),\n");
+    out.push_str("                }\n");
+    out.push_str("            }\n");
+    out.push_str("        }\n");
+    out.push_str("        println!(\"=========================================================\\n\");\n");
+    out.push_str("    }\n");
+    // =====================================================================
+
     // If eod_style, emit local helpers inline.
     if def.eod_style {
         out.push_str("    // EOD rows may have Price-typed cells or plain Number cells.\n");
@@ -161,6 +188,9 @@ fn generate_parser(out: &mut String, type_name: &str, def: &TickTypeDef) {
         .iter()
         .any(|c| c.r#type == "i64" && !def.required.contains(&c.name));
 
+    
+    let has_timestamp = def.columns.iter().any(|c| c.r#type == "timestamp");
+
     // Emit opt_number / opt_float / opt_i64 helpers (non-eod only)
     if !def.eod_style {
         if needs_opt_number {
@@ -185,6 +215,23 @@ fn generate_parser(out: &mut String, type_name: &str, def: &TickTypeDef) {
             );
             out.push_str("        match idx {\n");
             out.push_str("            Some(i) => row_number_i64(row, i),\n");
+            out.push_str("            None => 0,\n");
+            out.push_str("        }\n");
+            out.push_str("    }\n\n");
+        }
+
+        // NEW: timestamp helper (same style as eod_num)
+        if has_timestamp {
+            out.push_str("    fn row_timestamp(row: &crate::proto::DataValueList, idx: Option<usize>) -> i64 {\n");
+            out.push_str("        match idx {\n");
+            out.push_str("            Some(i) => row.values\n");
+            out.push_str("                .get(i)\n");
+            out.push_str("                .and_then(|dv| dv.data_type.as_ref())\n");
+            out.push_str("                .and_then(|dt| match dt {\n");
+            out.push_str("                    crate::proto::data_value::DataType::Timestamp(ts) => Some(ts.epoch_ms as i64),\n");
+            out.push_str("                    _ => None,\n");
+            out.push_str("                })\n");
+            out.push_str("                .unwrap_or(0),\n");
             out.push_str("            None => 0,\n");
             out.push_str("        }\n");
             out.push_str("    }\n\n");
@@ -488,6 +535,19 @@ fn generate_parser(out: &mut String, type_name: &str, def: &TickTypeDef) {
                 } else {
                     out.push_str(&format!(
                         "                {}: opt_number(row, {var}),\n",
+                        col.field
+                    ));
+                }
+            }
+            "timestamp" => {
+                if is_required {
+                    out.push_str(&format!(
+                        "                {}: row_timestamp(row, Some({var})),\n",
+                        col.field
+                    ));
+                } else {
+                    out.push_str(&format!(
+                        "                {}: row_timestamp(row, {var}),\n",
                         col.field
                     ));
                 }

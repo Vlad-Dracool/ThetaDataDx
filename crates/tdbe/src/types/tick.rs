@@ -91,7 +91,7 @@ pub struct InterestRateTick {
 #[derive(Debug, Clone, Copy)]
 #[repr(C, align(64))]
 pub struct IvTick {
-    pub ms_of_day: i32,
+    pub ms_of_day: i64,
     pub implied_volatility: f64,
     pub iv_error: f64,
     pub date: i32,
@@ -99,6 +99,15 @@ pub struct IvTick {
     pub strike: i32,
     pub right: i32,
     pub strike_price_type: i32,
+
+// New fields from the real server data
+    pub bid: f64,
+    pub bid_implied_vol: f64,
+    pub midpoint: f64,
+    pub ask: f64,
+    pub ask_implied_vol: f64,
+    pub underlying_timestamp: i64,
+    pub underlying_price: f64,
 }
 
 /// Market value tick.
