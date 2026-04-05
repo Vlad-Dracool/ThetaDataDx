@@ -84,9 +84,6 @@ pub async fn generic(
     for p in ep.params {
         if p.required && !params.contains_key(p.name) {
             let alt = match p.name {
-                "symbol" | "symbols" => "root",
-                "expiration" => "exp",
-                "interval" => "ivl",
                 _ => "",
             };
             if alt.is_empty() || !params.contains_key(alt) {
@@ -159,13 +156,18 @@ async fn dispatch(
     params: &HashMap<String, String>,
 ) -> Result<sonic_rs::Value, thetadatadx::Error> {
     // Shorthand closures for common param extraction.
-    let sym = || get_param(params, "symbol", "root");
-    let syms_str = || get_param(params, "symbols", "root");
+    let sym = || get_param(params, "symbol", "symbol");
+    let syms_str = || {
+        params
+            .get("symbol")
+            .cloned()
+            .unwrap_or_default()
+    };
     let start = || get_param(params, "start_date", "start_date");
     let end = || get_param(params, "end_date", "end_date");
     let date = || get_param(params, "date", "date");
     let interval = || {
-        let v = get_param(params, "interval", "ivl");
+        let v = get_param(params, "interval", "interval");
         if v.is_empty() {
             "60000".to_string()
         } else {
@@ -173,14 +175,14 @@ async fn dispatch(
         }
     };
     let interval_quote = || {
-        let v = get_param(params, "interval", "ivl");
+        let v = get_param(params, "interval", "interval");
         if v.is_empty() {
             "0".to_string()
         } else {
             v
         }
     };
-    let exp = || get_param(params, "expiration", "exp");
+    let exp = || get_param(params, "expiration", "expiration");
     let strike = || get_param(params, "strike", "strike");
     let right = || get_param(params, "right", "right");
     let request_type = || get_param(params, "request_type", "request_type");
