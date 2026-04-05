@@ -61,6 +61,17 @@ Returns a `Vec<MarketValueTick>` with market value fields:
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "market_cap": 52140000000000, "shares_outstanding": 0}
+]
+```
+
+> Market value snapshot for SPX. Index-level market cap represents aggregate constituent values.
+
 ## Notes
 
 - Returns `Vec<MarketValueTick>` in Rust.

@@ -111,6 +111,19 @@ for (auto& tick : eod) {
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260302, "open": 678.62, "high": 688.62, "low": 678.02, "close": 686.38, "volume": 87115983, "bid": 685.86, "ask": 685.90},
+  {"date": 20260303, "open": 674.95, "high": 682.61, "low": 669.66, "close": 680.33, "volume": 104510616, "bid": 679.20, "ask": 679.26},
+  {"date": 20260304, "open": 681.58, "high": 687.09, "low": 679.62, "close": 685.13, "volume": 78815016, "bid": 685.45, "ask": 685.60}
+]
+```
+
+> SPY end-of-day data for March 2026. Full response contains 24 rows.
+
 ## Notes
 
 - Python users can use the `_df` variant to get a pandas DataFrame directly: `tdx.stock_history_eod_df(...)`. Requires `pip install thetadatadx[pandas]`.

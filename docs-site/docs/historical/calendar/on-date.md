@@ -65,6 +65,17 @@ Returns a `Vec<CalendarDay>` with calendar information:
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "is_open": 1, "open_time": 34200000, "close_time": 57600000}
+]
+```
+
+> `is_open=1` means the market was open on that date.
+
 ## Notes
 
 - Use this to check any historical or future date's trading status before requesting data.

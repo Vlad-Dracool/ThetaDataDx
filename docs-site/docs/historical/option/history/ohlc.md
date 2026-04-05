@@ -109,6 +109,19 @@ auto bars = client.option_history_ohlc("SPY", "20241220", "500", "C",
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34200000, "open": 98.59, "high": 98.59, "low": 98.59, "close": 98.59, "volume": 1, "count": 1},
+  {"date": 20260402, "ms_of_day": 34260000, "open": 0.00, "high": 0.00, "low": 0.00, "close": 0.00, "volume": 0, "count": 0},
+  {"date": 20260402, "ms_of_day": 34320000, "open": 0.00, "high": 0.00, "low": 0.00, "close": 0.00, "volume": 0, "count": 0}
+]
+```
+
+> 1-minute OHLC bars for SPY 2026-04-17 550 call. Deep ITM options are illiquid -- most bars show zero volume.
+
 ## Notes
 
 - Shorthand is supported: `"1m"`, `"5m"`, `"15m"`, `"1h"`. Milliseconds (`"60000"`, `"300000"`, `"900000"`, `"3600000"`) are auto-converted to the nearest valid preset.

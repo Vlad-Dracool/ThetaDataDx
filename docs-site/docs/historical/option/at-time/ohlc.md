@@ -110,6 +110,19 @@ auto quotes = client.option_at_time_quote("SPY", "20241220", "500", "C",
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260330, "ms_of_day": 43200000, "bid": 88.50, "ask": 91.69, "bid_size": 10, "ask_size": 7},
+  {"date": 20260331, "ms_of_day": 43200000, "bid": 90.69, "ask": 93.67, "bid_size": 4, "ask_size": 10},
+  {"date": 20260401, "ms_of_day": 43200000, "bid": 107.99, "ask": 110.66, "bid_size": 10, "ask_size": 34}
+]
+```
+
+> Quote at 12:00 PM ET for SPY 2026-04-17 550 call. One row per date.
+
 ## Notes
 
 - Common time values: `"34200000"` (9:30 AM), `"46800000"` (1:00 PM), `"57600000"` (4:00 PM).

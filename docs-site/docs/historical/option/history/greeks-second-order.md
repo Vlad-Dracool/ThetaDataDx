@@ -122,3 +122,15 @@ Parameters are identical to [option_history_greeks_all](./greeks-all#parameters)
 <div class="param-desc">Milliseconds from midnight</div>
 </div>
 </div>
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34260000, "gamma": 0.000892, "vanna": -0.031200, "charm": 0.002500, "vomma": 0.019800, "veta": -0.112000},
+  {"date": 20260402, "ms_of_day": 34320000, "gamma": 0.000815, "vanna": -0.028400, "charm": 0.002100, "vomma": 0.017600, "veta": -0.098000}
+]
+```
+
+> Second-order Greeks at 1-minute intervals. Requires Professional subscription.
+

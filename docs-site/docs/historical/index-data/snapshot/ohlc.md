@@ -91,6 +91,18 @@ for (auto& bar : bars) {
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 57600000, "open": 6820.51, "high": 6916.23, "low": 6785.14, "close": 6899.87, "volume": 0},
+  {"date": 20260402, "ms_of_day": 57600000, "open": 21045.88, "high": 21312.15, "low": 20891.34, "close": 21256.72, "volume": 0}
+]
+```
+
+> OHLC snapshot for SPX and NDX. Indices do not have volume data.
+
 ## Notes
 
 - Pass multiple symbols in a single call to batch requests efficiently.

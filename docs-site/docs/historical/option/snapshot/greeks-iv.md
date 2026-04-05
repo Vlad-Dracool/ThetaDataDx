@@ -118,6 +118,17 @@ auto iv = client.option_snapshot_greeks_implied_volatility("SPY", "20241220", "5
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 58497982, "implied_volatility": 0.4091, "iv_error": 0.0, "expiration": 20260417, "strike": 550.0}
+]
+```
+
+> IV snapshot for SPY 2026-04-17 550 call.
+
 ## Notes
 
 - Use the optional override parameters (`stock_price`, `rate_value`, `annual_dividend`) to compute IV under custom assumptions.

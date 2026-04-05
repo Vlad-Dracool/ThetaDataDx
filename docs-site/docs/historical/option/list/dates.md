@@ -62,6 +62,15 @@ auto dates = client.option_list_dates("TRADE", "SPY", "20241220", "500", "C");
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+["20260301", "20260302", "20260303", "...", "20260401", "20260402"]
+```
+
+> All dates with data for the specified contract and request type.
+
 ## Notes
 
 - Different request types may have different date availability.

@@ -41,6 +41,15 @@ None.
 
 List of ticker symbol strings (e.g. `"AAPL"`, `"MSFT"`, `"GOOGL"`).
 
+
+### Sample Response
+
+```json
+["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA"]
+```
+
+> Returns 25,000+ symbols. Shown cropped to 5.
+
 ## Notes
 
 - Returns all symbols for which ThetaData has any historical stock data.

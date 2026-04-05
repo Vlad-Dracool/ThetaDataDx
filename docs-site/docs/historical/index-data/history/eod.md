@@ -93,6 +93,19 @@ for (auto& tick : eod) {
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260302, "open": 6824.36, "high": 6901.01, "low": 6796.85, "close": 6881.62, "volume": 0},
+  {"date": 20260303, "open": 6800.26, "high": 6840.05, "low": 6710.42, "close": 6816.63, "volume": 0},
+  {"date": 20260304, "open": 6831.69, "high": 6885.94, "low": 6811.64, "close": 6869.50, "volume": 0}
+]
+```
+
+> SPX end-of-day data for March 2026. Full response contains 24 rows.
+
 ## Notes
 
 - Returns one row per trading day in the range. Non-trading days are excluded.

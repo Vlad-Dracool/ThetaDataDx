@@ -46,6 +46,15 @@ auto exps = client.option_list_expirations("SPY");
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+["2012-06-01", "2012-06-08", "2012-06-16", "...", "2028-12-16", "2029-01-19"]
+```
+
+> SPY has 2,000+ expirations spanning from 2012 to 2029. Shown cropped.
+
 ## Notes
 
 - Returns all expirations including weeklies, monthlies, and quarterlies.

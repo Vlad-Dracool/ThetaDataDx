@@ -119,6 +119,19 @@ Helper methods: `bid_price()`, `ask_price()`, `midpoint_price()`, `midpoint_valu
 | 3:00 PM | `"54000000"` |
 | 4:00 PM (market close) | `"57600000"` |
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260330, "ms_of_day": 43200000, "bid": 637.33, "ask": 637.34, "midpoint": 637.33},
+  {"date": 20260331, "ms_of_day": 43200000, "bid": 639.77, "ask": 639.79, "midpoint": 639.78},
+  {"date": 20260401, "ms_of_day": 43200000, "bid": 657.81, "ask": 657.82, "midpoint": 657.81}
+]
+```
+
+> SPY quote at 12:00 PM ET on each date. One row per date in the range.
+
 ## Notes
 
 - Returns one QuoteTick per trading day in the date range.

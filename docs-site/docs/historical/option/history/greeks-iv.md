@@ -115,6 +115,18 @@ Parameters are identical to [option_history_greeks_all](./greeks-all#parameters)
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34260000, "implied_volatility": 0.4445, "iv_error": 0.0},
+  {"date": 20260402, "ms_of_day": 34320000, "implied_volatility": 0.4350, "iv_error": 0.0038}
+]
+```
+
+> IV at 1-minute intervals for SPY 2026-04-17 550 call. `iv_error` of 0.0 means the solver converged exactly.
+
 ## Notes
 
 - Includes both trade IV and bid/ask IV for spread analysis.

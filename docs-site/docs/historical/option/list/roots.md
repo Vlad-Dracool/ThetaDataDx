@@ -45,6 +45,15 @@ None.
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+["SPY", "SPY1", "SPY2", "SPY7"]
+```
+
+> Returns all option root symbols for the given underlying.
+
 ## Notes
 
 - Returns all underlying symbols, not individual contracts. Use [option_list_expirations](./expirations) and [option_list_strikes](./strikes) to drill into a specific chain.

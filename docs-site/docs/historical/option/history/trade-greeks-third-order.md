@@ -140,3 +140,14 @@ Parameters are identical to [option_history_trade_greeks_all](./trade-greeks-all
 <div class="param-desc">Milliseconds from midnight</div>
 </div>
 </div>
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34203497, "speed": -0.00000940, "zomma": 0.00005180, "color": -0.00000350, "ultima": 0.00014200}
+]
+```
+
+> Third-order Greeks at each trade. Requires Professional subscription.
+

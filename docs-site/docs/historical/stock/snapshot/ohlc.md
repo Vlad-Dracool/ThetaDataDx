@@ -92,6 +92,17 @@ for (auto& bar : bars) {
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 71999485, "open": 367.20, "high": 373.60, "low": 364.15, "close": 373.46, "volume": 18370273, "count": 440751},
+  {"date": 20260402, "ms_of_day": 71983113, "open": 254.14, "high": 256.13, "low": 250.65, "close": 255.92, "volume": 24286541, "count": 407209},
+  {"date": 20260402, "ms_of_day": 71998357, "open": 646.42, "high": 657.92, "low": 645.11, "close": 655.94, "volume": 38832397, "count": 510918}
+]
+```
+
 ## Notes
 
 - Accepts multiple symbols in a single call. Batch requests to reduce round-trips.

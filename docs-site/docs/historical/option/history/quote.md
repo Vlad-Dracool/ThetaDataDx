@@ -105,6 +105,19 @@ auto quotes = client.option_history_quote("SPY", "20241220", "500", "C",
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34200000, "bid": 0.00, "ask": 0.00, "bid_size": 0, "ask_size": 0},
+  {"date": 20260402, "ms_of_day": 34260000, "bid": 97.94, "ask": 98.90, "bid_size": 1, "ask_size": 1},
+  {"date": 20260402, "ms_of_day": 34320000, "bid": 97.05, "ask": 100.60, "bid_size": 1, "ask_size": 54}
+]
+```
+
+> 1-minute NBBO quotes for SPY 2026-04-17 550 call.
+
 ## Notes
 
 - Use `"0"` as the interval to get every quote change (tick-by-tick).

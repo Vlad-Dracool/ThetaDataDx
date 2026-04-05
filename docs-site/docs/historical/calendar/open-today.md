@@ -60,6 +60,17 @@ Returns a `Vec<CalendarDay>` with market status fields:
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260403, "is_open": 1, "open_time": 34200000, "close_time": 57600000}
+]
+```
+
+> `is_open=1` means the market is open. `open_time` and `close_time` are milliseconds from midnight ET (34200000 = 9:30 AM, 57600000 = 4:00 PM).
+
 ## Notes
 
 - Call this at application startup to determine if live data will be available.

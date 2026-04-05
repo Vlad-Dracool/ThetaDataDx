@@ -51,6 +51,15 @@ std::cout << "First: " << dates.front()
 
 List of date strings in `YYYYMMDD` format, sorted chronologically.
 
+
+### Sample Response
+
+```json
+["20040101", "20040102", "20040105", "...", "20260401", "20260402"]
+```
+
+> Returns all available dates sorted chronologically. Shown cropped.
+
 ## Notes
 
 - The available date range varies by request type.

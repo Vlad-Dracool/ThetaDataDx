@@ -123,6 +123,19 @@ std::cout << trades.size() << " trades" << std::endl;
 
 Helper methods: `get_price()`, `is_cancelled()`, `regular_trading_hours()`, `is_seller()`, `is_incremental_volume()`
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34200000, "price": 646.42, "size": 126, "exchange": 4, "condition": 1, "sequence": 1704668},
+  {"date": 20260402, "ms_of_day": 34200000, "price": 646.42, "size": 126, "exchange": 73, "condition": 95, "sequence": 1704670},
+  {"date": 20260402, "ms_of_day": 34200000, "price": 646.42, "size": 126, "exchange": 43, "condition": 95, "sequence": 1704674}
+]
+```
+
+> SPY trades on 2026-04-02. Full response contains 887,576 trades. Use the `_stream` variant for large responses.
+
 ## Notes
 
 - A single day of AAPL trades can exceed 100,000 rows. Use the Rust `_stream` variant for large responses to avoid holding everything in memory.

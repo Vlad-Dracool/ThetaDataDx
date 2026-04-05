@@ -91,3 +91,14 @@ auto bars = client.option_snapshot_ohlc("SPY", "20241220", "500", "C");
 <div class="param-desc">Milliseconds from midnight</div>
 </div>
 </div>
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34203497, "open": 98.59, "high": 98.59, "low": 98.59, "close": 98.59, "volume": 1, "expiration": 20260417, "strike": 550.0}
+]
+```
+
+> SPY 2026-04-17 550 call OHLC snapshot. Wildcard queries return multiple contracts with `expiration`, `strike`, and `right` fields populated.
+

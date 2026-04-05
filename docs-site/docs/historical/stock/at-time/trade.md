@@ -142,6 +142,19 @@ Helper methods: `get_price()`, `is_cancelled()`, `regular_trading_hours()`, `is_
 | 3:00 PM | `"54000000"` |
 | 4:00 PM (market close) | `"57600000"` |
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260330, "ms_of_day": 43199998, "price": 637.34, "size": 2140},
+  {"date": 20260331, "ms_of_day": 43199983, "price": 639.79, "size": 100},
+  {"date": 20260401, "ms_of_day": 43199879, "price": 657.82, "size": 100}
+]
+```
+
+> SPY trade closest to 12:00 PM ET on each date. One row per date in the range.
+
 ## Notes
 
 - Returns one TradeTick per trading day in the date range.

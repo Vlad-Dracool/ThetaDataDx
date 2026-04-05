@@ -164,6 +164,24 @@ auto greeks = client.option_snapshot_greeks_all("SPY", "20241220", "500", "C");
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {
+    "date": 20260402, "ms_of_day": 58497982, "implied_volatility": 0.4091,
+    "delta": 0.9855, "gamma": 0.000412, "theta": -0.1205, "vega": 4.8813,
+    "rho": 22.1671, "vanna": -0.0234, "charm": 0.0018, "vomma": 0.0156,
+    "veta": -0.0892, "speed": -0.00000841, "zomma": 0.00004523,
+    "color": -0.00000312, "ultima": 0.00012845, "epsilon": -26.5693, "lambda": 6.0354,
+    "expiration": 20260417, "strike": 550.0
+  }
+]
+```
+
+> All Greeks (first, second, and third order) for SPY 2026-04-17 550 call. Requires Professional subscription.
+
 ## Notes
 
 - If you only need a subset of Greeks, use the order-specific endpoints ([first order](./greeks-first-order), [second order](./greeks-second-order), [third order](./greeks-third-order)) to reduce payload size.

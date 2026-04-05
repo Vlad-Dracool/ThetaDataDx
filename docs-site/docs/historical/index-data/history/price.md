@@ -73,6 +73,19 @@ Returns a `Vec<PriceTick>` with price and time fields:
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34200000, "price": 6820.51},
+  {"date": 20260402, "ms_of_day": 34260000, "price": 6828.42},
+  {"date": 20260402, "ms_of_day": 34320000, "price": 6834.15}
+]
+```
+
+> SPX intraday price history at 1-minute intervals. Requires Value subscription.
+
 ## Notes
 
 - Returns `Vec<PriceTick>` in Rust.

@@ -104,3 +104,16 @@ auto eod = client.option_history_eod("SPY", "20241220", "500", "C",
 <div class="param-desc">Open interest</div>
 </div>
 </div>
+
+### Sample Response
+
+```json
+[
+  {"date": 20260302, "open": 131.57, "high": 138.32, "low": 131.57, "close": 138.32, "volume": 2, "bid": 136.89, "ask": 139.70},
+  {"date": 20260303, "open": 0.00, "high": 0.00, "low": 0.00, "close": 0.00, "volume": 0, "bid": 131.05, "ask": 133.87},
+  {"date": 20260305, "open": 129.73, "high": 129.73, "low": 129.73, "close": 129.73, "volume": 1, "bid": 131.75, "ask": 134.55}
+]
+```
+
+> EOD data for SPY 2026-04-17 550 call. Days with no trades show `0.00` for OHLC but still have closing bid/ask.
+

@@ -182,6 +182,22 @@ auto g = client.option_history_trade_greeks_all("SPY", "20241220", "500", "C", "
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {
+    "date": 20260402, "ms_of_day": 34203497,
+    "implied_volatility": 0.4290, "delta": 0.9742, "gamma": 0.000756,
+    "theta": -0.1645, "vega": 7.8120, "rho": 21.8812,
+    "vanna": -0.0267, "charm": 0.0019, "speed": -0.0000094, "zomma": 0.0000518
+  }
+]
+```
+
+> All Greeks computed at each trade execution. Requires Professional subscription.
+
 ## Notes
 
 - Each row combines trade data with Greeks computed using the trade price and the underlying price at the exact moment of execution.

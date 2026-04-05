@@ -118,6 +118,18 @@ auto tq = client.option_history_trade_quote("SPY", "20241220", "500", "C", "2024
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34203497, "trade_price": 98.59, "size": 1, "bid": 97.94, "ask": 98.90, "exchange": 6},
+  {"date": 20260402, "ms_of_day": 34950122, "trade_price": 99.10, "size": 2, "bid": 98.50, "ask": 99.45, "exchange": 10}
+]
+```
+
+> Each row pairs the trade with the prevailing NBBO quote at execution time.
+
 ## Notes
 
 - Useful for trade classification (e.g., determining if a trade hit the bid or lifted the offer).
