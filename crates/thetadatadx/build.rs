@@ -26,12 +26,13 @@ struct Schema {
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 struct TickTypeDef {
-    doc: String,
-    copy: bool,
-    #[serde(default)]
-    align: Option<u32>,
+    #[serde(rename = "doc")]
+    _doc: String,
+    #[serde(rename = "copy")]
+    _copy: bool,
+    #[serde(default, rename = "align")]
+    _align: Option<u32>,
     parser: String,
     #[serde(default)]
     required: Vec<String>,

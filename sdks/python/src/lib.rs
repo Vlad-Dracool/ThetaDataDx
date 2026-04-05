@@ -418,54 +418,6 @@ fn option_contract_to_dict(py: Python<'_>, c: &tick::OptionContract) -> Py<PyAny
     dict.into_any().unbind()
 }
 
-/// Convert a `proto::DataTable` into a Python list of dicts.
-///
-/// Each dict has the column headers as keys and the corresponding row
-/// values as values (strings, ints, or nested dicts for price/timestamp).
-#[allow(dead_code)]
-fn data_table_to_dicts(py: Python<'_>, table: &thetadatadx::proto::DataTable) -> Vec<Py<PyAny>> {
-    use thetadatadx::proto::data_value::DataType;
-
-    table
-        .data_table
-        .iter()
-        .map(|row| {
-            let dict = PyDict::new(py);
-            for (i, val) in row.values.iter().enumerate() {
-                let key = table
-                    .headers
-                    .get(i)
-                    .map(|s| s.as_str())
-                    .unwrap_or("unknown");
-                match &val.data_type {
-                    Some(DataType::Text(s)) => {
-                        dict.set_item(key, s.as_str()).unwrap();
-                    }
-                    Some(DataType::Number(n)) => {
-                        dict.set_item(key, *n).unwrap();
-                    }
-                    Some(DataType::Price(p)) => {
-                        let d = PyDict::new(py);
-                        d.set_item("value", p.value).unwrap();
-                        d.set_item("type", p.r#type).unwrap();
-                        dict.set_item(key, d).unwrap();
-                    }
-                    Some(DataType::Timestamp(ts)) => {
-                        let d = PyDict::new(py);
-                        d.set_item("epoch_ms", ts.epoch_ms).unwrap();
-                        d.set_item("zone", ts.zone).unwrap();
-                        dict.set_item(key, d).unwrap();
-                    }
-                    Some(DataType::NullValue(_)) | None => {
-                        dict.set_item(key, py.None()).unwrap();
-                    }
-                }
-            }
-            dict.into_any().unbind()
-        })
-        .collect()
-}
-
 // ── Greeks ──
 
 /// Compute all 22 Black-Scholes Greeks + IV in one call.

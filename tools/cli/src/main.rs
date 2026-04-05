@@ -842,40 +842,6 @@ impl TabularData {
 /// they render as proper `null`.
 const NULL_SENTINEL: &str = "\x00NULL\x00";
 
-#[allow(dead_code)]
-fn render_data_table(table: &thetadatadx::proto::DataTable, fmt: &OutputFormat) {
-    let headers: Vec<&str> = table.headers.iter().map(|s| s.as_str()).collect();
-    let mut td = TabularData::new(headers);
-
-    for row in &table.data_table {
-        let mut cells = Vec::new();
-        for (i, _header) in table.headers.iter().enumerate() {
-            let cell = row
-                .values
-                .get(i)
-                .and_then(|dv| dv.data_type.as_ref())
-                .map(|dt| match dt {
-                    thetadatadx::proto::data_value::DataType::Number(n) => format!("{n}"),
-                    thetadatadx::proto::data_value::DataType::Text(t) => t.clone(),
-                    thetadatadx::proto::data_value::DataType::Price(p) => {
-                        format!("{}", Price::new(p.value, p.r#type))
-                    }
-                    thetadatadx::proto::data_value::DataType::Timestamp(ts) => {
-                        format!("{}", ts.epoch_ms)
-                    }
-                    thetadatadx::proto::data_value::DataType::NullValue(_) => {
-                        NULL_SENTINEL.to_string()
-                    }
-                })
-                .unwrap_or_else(|| NULL_SENTINEL.to_string());
-            cells.push(cell);
-        }
-        td.push(cells);
-    }
-
-    td.render(fmt);
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 //  Client construction helper
 // ═══════════════════════════════════════════════════════════════════════════

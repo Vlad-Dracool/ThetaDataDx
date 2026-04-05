@@ -519,8 +519,8 @@ mod config_file {
     #[derive(Debug, Default, Deserialize)]
     #[serde(default)]
     struct AuthSection {
-        #[allow(dead_code)]
-        creds_file: Option<String>,
+        #[serde(rename = "creds_file")]
+        _creds_file: Option<String>,
     }
 
     impl FpssHosts {

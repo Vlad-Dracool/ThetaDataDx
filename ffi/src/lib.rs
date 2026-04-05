@@ -840,8 +840,7 @@ macro_rules! tick_array_type {
         }
 
         impl $name {
-            #[allow(dead_code)]
-            fn from_vec(v: Vec<$tick>) -> Self {
+            pub(crate) fn from_vec(v: Vec<$tick>) -> Self {
                 let len = v.len();
                 if len == 0 {
                     return Self {
@@ -879,7 +878,6 @@ tick_array_type!(TdxOpenInterestTickArray, tdbe::OpenInterestTick);
 tick_array_type!(TdxMarketValueTickArray, tdbe::MarketValueTick);
 tick_array_type!(TdxCalendarDayArray, tdbe::CalendarDay);
 tick_array_type!(TdxInterestRateTickArray, tdbe::InterestRateTick);
-tick_array_type!(TdxSnapshotTradeTickArray, tdbe::SnapshotTradeTick);
 tick_array_type!(TdxTradeQuoteTickArray, tdbe::TradeQuoteTick);
 
 /// Generate a `#[no_mangle] extern "C"` free function for a tick array type.
@@ -904,10 +902,6 @@ tick_array_free!(tdx_open_interest_tick_array_free, TdxOpenInterestTickArray);
 tick_array_free!(tdx_market_value_tick_array_free, TdxMarketValueTickArray);
 tick_array_free!(tdx_calendar_day_array_free, TdxCalendarDayArray);
 tick_array_free!(tdx_interest_rate_tick_array_free, TdxInterestRateTickArray);
-tick_array_free!(
-    tdx_snapshot_trade_tick_array_free,
-    TdxSnapshotTradeTickArray
-);
 tick_array_free!(tdx_trade_quote_tick_array_free, TdxTradeQuoteTickArray);
 
 // ═══════════════════════════════════════════════════════════════════════

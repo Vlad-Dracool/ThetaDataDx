@@ -428,45 +428,6 @@ fn tool_definitions() -> Vec<Value> {
 //  Serialization helpers
 // ═══════════════════════════════════════════════════════════════════════════
 
-#[allow(dead_code)]
-fn serialize_data_table(table: &thetadatadx::proto::DataTable) -> Value {
-    let headers: Vec<&str> = table.headers.iter().map(|s| s.as_str()).collect();
-    let rows: Vec<Value> = table
-        .data_table
-        .iter()
-        .map(|row| {
-            let cells: Vec<Value> = row
-                .values
-                .iter()
-                .map(|dv| match &dv.data_type {
-                    Some(thetadatadx::proto::data_value::DataType::Number(n)) => json!(n),
-                    Some(thetadatadx::proto::data_value::DataType::Price(p)) => {
-                        // Use Price::from_proto().to_f64() to avoid duplicating
-                        // the scaling logic that already lives in types/price.rs.
-                        let price = tdbe::Price::new(p.value, p.r#type);
-                        json!(price.to_f64())
-                    }
-                    Some(thetadatadx::proto::data_value::DataType::Text(s)) => json!(s),
-                    Some(thetadatadx::proto::data_value::DataType::NullValue(_)) => {
-                        Value::new_null()
-                    }
-                    Some(thetadatadx::proto::data_value::DataType::Timestamp(ts)) => {
-                        json!(format!("{ts:?}"))
-                    }
-                    None => Value::new_null(),
-                })
-                .collect();
-            cells.into_iter().collect::<Value>()
-        })
-        .collect();
-
-    json!({
-        "headers": headers,
-        "rows": rows,
-        "row_count": rows.len(),
-    })
-}
-
 fn serialize_eod_ticks(ticks: &[tdbe::types::tick::EodTick]) -> Value {
     let rows: Vec<Value> = ticks
         .iter()

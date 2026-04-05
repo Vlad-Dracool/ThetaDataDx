@@ -319,47 +319,6 @@ pub fn option_contracts_to_json(contracts: &[OptionContract]) -> Vec<sonic_rs::V
         .collect()
 }
 
-/// Convert a raw `DataTable` to a JSON array of objects.
-///
-/// Proto `DataValue.data_type` oneof variants:
-/// - `Text(String)`, `Number(i64)`, `Price(Price)`, `Timestamp(ZonedDateTime)`, `NullValue(i32)`
-#[allow(dead_code)]
-pub fn data_table_to_json(table: &proto::DataTable) -> Vec<sonic_rs::Value> {
-    table
-        .data_table
-        .iter()
-        .map(|row| {
-            let mut obj = sonic_rs::Object::new();
-            for (i, header) in table.headers.iter().enumerate() {
-                if let Some(val) = row.values.get(i) {
-                    use proto::data_value::DataType;
-                    match &val.data_type {
-                        Some(DataType::Number(n)) => {
-                            obj.insert(header, sonic_rs::Value::from(*n));
-                        }
-                        Some(DataType::Text(s)) => {
-                            obj.insert(header, sonic_rs::Value::from(s.as_str()));
-                        }
-                        Some(DataType::Price(p)) => {
-                            let f = fmt_price(p.value, p.r#type);
-                            let v = sonic_rs::Value::new_f64(f)
-                                .unwrap_or_else(|| sonic_rs::Value::from(0i64));
-                            obj.insert(header, v);
-                        }
-                        Some(DataType::Timestamp(ts)) => {
-                            obj.insert(header, sonic_rs::Value::from(ts.epoch_ms));
-                        }
-                        Some(DataType::NullValue(_)) | None => {
-                            obj.insert(header, sonic_rs::Value::default());
-                        }
-                    }
-                }
-            }
-            sonic_rs::Value::from(obj)
-        })
-        .collect()
-}
-
 // ---------------------------------------------------------------------------
 //  CSV formatting
 // ---------------------------------------------------------------------------
