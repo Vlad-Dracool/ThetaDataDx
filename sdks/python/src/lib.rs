@@ -411,12 +411,12 @@ fn option_contract_to_dict(py: Python<'_>, c: &tick::OptionContract) -> Py<PyAny
 fn all_greeks(
     py: Python<'_>,
     spot: f64,
-    strike: &str,
+    strike: f64,
     rate: f64,
     div_yield: f64,
     tte: f64,
     option_price: f64,
-    right: &str,
+    is_call: bool,
 ) -> Py<PyAny> {
     let g = tdbe::greeks::all_greeks(spot, strike, rate, div_yield, tte, option_price, is_call);
     let dict = PyDict::new(py);
@@ -453,12 +453,12 @@ fn all_greeks(
 #[allow(clippy::too_many_arguments)] // Reason: mirrors Black-Scholes parameter set expected by Python callers
 fn implied_volatility(
     spot: f64,
-    strike: &str,
+    strike: f64,
     rate: f64,
     div_yield: f64,
     tte: f64,
     option_price: f64,
-    right: &str,
+    is_call: bool,
 ) -> (f64, f64) {
     tdbe::greeks::implied_volatility(spot, strike, rate, div_yield, tte, option_price, is_call)
 }
