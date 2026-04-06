@@ -222,8 +222,12 @@ contract_id = true
 parser = "parse_greeks_ticks"
 required = ["ms_of_day"]
 columns = [
-    { name = "ms_of_day",          field = "ms_of_day",          type = "i32" },
+    { name = "ms_of_day",          field = "ms_of_day",          type = "timestamp" },
     { name = "implied_volatility", field = "implied_volatility", type = "f64" },
+    { name = "bid",                field = "bid",                type = "f64" },
+    { name = "ask",                field = "ask",                type = "f64" },
+    { name = "underlying_timestamp",field = "underlying_timestamp",type = "timestamp" },
+    { name = "underlying_price",    field = "underlying_price",    type = "f64" },
     { name = "delta",              field = "delta",              type = "f64" },
     { name = "gamma",              field = "gamma",              type = "f64" },
     { name = "theta",              field = "theta",              type = "f64" },

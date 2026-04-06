@@ -48,7 +48,7 @@ pub struct EodTick {
 #[derive(Debug, Clone, Copy)]
 #[repr(C, align(64))]
 pub struct GreeksTick {
-    pub ms_of_day: i32,
+    pub ms_of_day: i64,
     pub implied_volatility: f64,
     pub delta: f64,
     pub gamma: f64,
@@ -76,6 +76,10 @@ pub struct GreeksTick {
     pub strike: i32,
     pub right: i32,
     pub strike_price_type: i32,
+    pub bid: f64,
+    pub ask: f64,
+    pub underlying_timestamp: i64,
+    pub underlying_price: f64,
 }
 
 /// Interest rate tick.
