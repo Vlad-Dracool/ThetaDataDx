@@ -117,6 +117,16 @@ for (auto& t : trades) {
 
 Helper methods: `get_price()`, `is_cancelled()`, `regular_trading_hours()`, `is_seller()`, `is_incremental_volume()`
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 71983113, "price": 255.35, "size": 50, "exchange": 0, "condition": 1},
+  {"date": 20260402, "ms_of_day": 71998357, "price": 655.94, "size": 50, "exchange": 0, "condition": 1}
+]
+```
+
 ## Notes
 
 - Accepts multiple symbols in a single call.

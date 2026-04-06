@@ -94,6 +94,16 @@ for (auto& q : quotes) {
 
 Helper methods: `bid_price()`, `ask_price()`, `midpoint_price()`, `midpoint_value()`
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 72000220, "bid": 250.30, "bid_size": 51, "ask": 255.38, "ask_size": 201, "midpoint": 252.84},
+  {"date": 20260402, "ms_of_day": 72000000, "bid": 655.61, "bid_size": 200, "ask": 656.41, "ask_size": 200, "midpoint": 656.01}
+]
+```
+
 ## Notes
 
 - Accepts multiple symbols in a single call. Batch requests to reduce round-trips.

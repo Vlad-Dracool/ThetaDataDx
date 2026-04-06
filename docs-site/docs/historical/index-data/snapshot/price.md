@@ -61,6 +61,19 @@ Returns a `Vec<PriceTick>` with price fields:
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 57600000, "price": 6899.87},
+  {"date": 20260402, "ms_of_day": 57600000, "price": 21256.72},
+  {"date": 20260402, "ms_of_day": 57600000, "price": 18.42}
+]
+```
+
+> Latest price for SPX, NDX, and VIX.
+
 ## Notes
 
 - Returns `Vec<PriceTick>` in Rust.

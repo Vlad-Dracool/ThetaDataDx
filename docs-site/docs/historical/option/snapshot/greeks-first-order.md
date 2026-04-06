@@ -131,3 +131,19 @@ Parameters are identical to [option_snapshot_greeks_all](./greeks-all#parameters
 <div class="param-desc">Milliseconds from midnight</div>
 </div>
 </div>
+
+### Sample Response
+
+```json
+[
+  {
+    "date": 20260402, "ms_of_day": 58497982, "implied_volatility": 0.4091,
+    "delta": 0.9855, "theta": -0.1205, "vega": 4.8813, "rho": 22.1671,
+    "epsilon": -26.5693, "lambda": 6.0354,
+    "expiration": 20260417, "strike": 550.0
+  }
+]
+```
+
+> First-order Greeks for SPY 2026-04-17 550 call.
+

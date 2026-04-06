@@ -94,6 +94,19 @@ Returns a `Vec<InterestRateTick>` with rate data per trading day:
 | `TREASURY_Y20` | 20-year Treasury |
 | `TREASURY_Y30` | 30-year Treasury |
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260302, "rate": 0.043200},
+  {"date": 20260303, "rate": 0.043200},
+  {"date": 20260304, "rate": 0.043100}
+]
+```
+
+> SOFR end-of-day rates for March 2026. Requires Value subscription.
+
 ## Notes
 
 - Rates are published on trading days only. Non-trading days are excluded.

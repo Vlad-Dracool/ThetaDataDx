@@ -64,6 +64,19 @@ Combined trade + quote tick (25 fields). Contains the full trade data plus the p
 
 Helper methods: `trade_price()`, `bid_price()`, `ask_price()`
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34200015, "trade_price": 646.42, "size": 100, "bid": 646.40, "ask": 646.42, "exchange": 4},
+  {"date": 20260402, "ms_of_day": 34200023, "trade_price": 646.43, "size": 200, "bid": 646.41, "ask": 646.43, "exchange": 73},
+  {"date": 20260402, "ms_of_day": 34200031, "trade_price": 646.41, "size": 50, "bid": 646.40, "ask": 646.42, "exchange": 12}
+]
+```
+
+> Each row pairs the trade with the prevailing NBBO quote at execution time.
+
 ## Notes
 
 - This endpoint merges trade and quote streams so each trade row includes the best bid/ask at the time of execution. Useful for computing effective spread, price improvement, and trade classification.

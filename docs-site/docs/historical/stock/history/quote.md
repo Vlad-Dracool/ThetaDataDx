@@ -109,6 +109,19 @@ std::cout << quotes.size() << " quotes" << std::endl;
 
 Helper methods: `bid_price()`, `ask_price()`, `midpoint_price()`, `midpoint_value()`
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34200000, "bid": 646.41, "bid_size": 1360, "ask": 646.42, "ask_size": 120, "midpoint": 646.41},
+  {"date": 20260402, "ms_of_day": 34260000, "bid": 646.85, "bid_size": 440, "ask": 646.87, "ask_size": 480, "midpoint": 646.86},
+  {"date": 20260402, "ms_of_day": 34320000, "bid": 647.35, "bid_size": 160, "ask": 647.38, "ask_size": 840, "midpoint": 647.36}
+]
+```
+
+> SPY 1-minute NBBO quotes on 2026-04-02. Full response contains 391 rows.
+
 ## Notes
 
 - Setting `interval` to `"0"` returns every NBBO change, which can produce hundreds of thousands of rows for active symbols. Use the Rust `_stream` variant for large responses.

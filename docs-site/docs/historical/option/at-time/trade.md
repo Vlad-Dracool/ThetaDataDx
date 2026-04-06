@@ -102,6 +102,18 @@ auto trades = client.option_at_time_trade("SPY", "20241220", "500", "C",
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260331, "ms_of_day": 38482216, "price": 93.00, "size": 1},
+  {"date": 20260402, "ms_of_day": 34203497, "price": 98.59, "size": 1}
+]
+```
+
+> Trade closest to 12:00 PM ET for SPY 2026-04-17 550 call. One row per date.
+
 ## Notes
 
 - Common time values: `"34200000"` (9:30 AM), `"46800000"` (1:00 PM), `"57600000"` (4:00 PM).

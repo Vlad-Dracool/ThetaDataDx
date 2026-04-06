@@ -118,3 +118,15 @@ Parameters are identical to [option_history_greeks_all](./greeks-all#parameters)
 <div class="param-desc">Milliseconds from midnight</div>
 </div>
 </div>
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34260000, "speed": -0.00001120, "zomma": 0.00006120, "color": -0.00000420, "ultima": 0.00016800},
+  {"date": 20260402, "ms_of_day": 34320000, "speed": -0.00001040, "zomma": 0.00005840, "color": -0.00000390, "ultima": 0.00015200}
+]
+```
+
+> Third-order Greeks at 1-minute intervals. Requires Professional subscription.
+

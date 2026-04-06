@@ -135,6 +135,21 @@ impl Config {
         }
     }
 
+    /// Set whether to derive OHLCVC bars locally from trade events.
+    ///
+    /// When ``False``, only server-sent OHLCVC frames are emitted,
+    /// reducing per-trade throughput overhead.
+    #[setter]
+    fn set_derive_ohlcvc(&mut self, enabled: bool) {
+        self.inner.derive_ohlcvc = enabled;
+    }
+
+    /// Get the current OHLCVC derivation setting.
+    #[getter]
+    fn get_derive_ohlcvc(&self) -> bool {
+        self.inner.derive_ohlcvc
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "Config(mdds={}:{}, fpss_hosts={})",
@@ -403,54 +418,6 @@ fn option_contract_to_dict(py: Python<'_>, c: &tick::OptionContract) -> Py<PyAny
     dict.into_any().unbind()
 }
 
-/// Convert a `proto::DataTable` into a Python list of dicts.
-///
-/// Each dict has the column headers as keys and the corresponding row
-/// values as values (strings, ints, or nested dicts for price/timestamp).
-#[allow(dead_code)]
-fn data_table_to_dicts(py: Python<'_>, table: &thetadatadx::proto::DataTable) -> Vec<Py<PyAny>> {
-    use thetadatadx::proto::data_value::DataType;
-
-    table
-        .data_table
-        .iter()
-        .map(|row| {
-            let dict = PyDict::new(py);
-            for (i, val) in row.values.iter().enumerate() {
-                let key = table
-                    .headers
-                    .get(i)
-                    .map(|s| s.as_str())
-                    .unwrap_or("unknown");
-                match &val.data_type {
-                    Some(DataType::Text(s)) => {
-                        dict.set_item(key, s.as_str()).unwrap();
-                    }
-                    Some(DataType::Number(n)) => {
-                        dict.set_item(key, *n).unwrap();
-                    }
-                    Some(DataType::Price(p)) => {
-                        let d = PyDict::new(py);
-                        d.set_item("value", p.value).unwrap();
-                        d.set_item("type", p.r#type).unwrap();
-                        dict.set_item(key, d).unwrap();
-                    }
-                    Some(DataType::Timestamp(ts)) => {
-                        let d = PyDict::new(py);
-                        d.set_item("epoch_ms", ts.epoch_ms).unwrap();
-                        d.set_item("zone", ts.zone).unwrap();
-                        dict.set_item(key, d).unwrap();
-                    }
-                    Some(DataType::NullValue(_)) | None => {
-                        dict.set_item(key, py.None()).unwrap();
-                    }
-                }
-            }
-            dict.into_any().unbind()
-        })
-        .collect()
-}
-
 // ── Greeks ──
 
 /// Compute all 22 Black-Scholes Greeks + IV in one call.
@@ -469,7 +436,7 @@ fn data_table_to_dicts(py: Python<'_>, table: &thetadatadx::proto::DataTable) ->
 ///     vanna, charm, vomma, veta, speed, zomma, color, ultima,
 ///     d1, d2, dual_delta, dual_gamma, epsilon, lambda
 #[pyfunction]
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)] // Reason: mirrors Black-Scholes parameter set expected by Python callers
 fn all_greeks(
     py: Python<'_>,
     spot: f64,
@@ -512,7 +479,7 @@ fn all_greeks(
 /// Returns:
 ///     Tuple of (iv, error)
 #[pyfunction]
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)] // Reason: mirrors Black-Scholes parameter set expected by Python callers
 fn implied_volatility(
     spot: f64,
     strike: f64,
@@ -973,23 +940,6 @@ impl ThetaDataDx {
 
         self.tdx
             .start_streaming(move |event: &fpss::FpssEvent| {
-                let buffered = fpss_event_to_buffered(event);
-                let _ = tx.send(buffered);
-            })
-            .map_err(to_py_err)?;
-
-        if let Ok(mut guard) = self.rx.lock() {
-            *guard = Some(Arc::new(Mutex::new(rx)));
-        }
-        Ok(())
-    }
-
-    /// Start FPSS streaming with OHLCVC derivation disabled.
-    fn start_streaming_no_ohlcvc(&self) -> PyResult<()> {
-        let (tx, rx) = std::sync::mpsc::channel::<BufferedEvent>();
-
-        self.tdx
-            .start_streaming_no_ohlcvc(move |event: &fpss::FpssEvent| {
                 let buffered = fpss_event_to_buffered(event);
                 let _ = tx.send(buffered);
             })
@@ -2141,7 +2091,7 @@ impl ThetaDataDx {
 
     // Option — At-Time (2)
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)] // Reason: ThetaData API requires all option identifiers + date range + time
     fn option_at_time_trade(
         &self,
         py: Python<'_>,
@@ -2168,7 +2118,7 @@ impl ThetaDataDx {
         })?;
         Ok(ticks.iter().map(|t| trade_tick_to_dict(py, t)).collect())
     }
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)] // Reason: ThetaData API requires all option identifiers + date range + time
     fn option_at_time_quote(
         &self,
         py: Python<'_>,

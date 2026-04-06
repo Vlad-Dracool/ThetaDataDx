@@ -84,9 +84,6 @@ pub async fn generic(
     for p in ep.params {
         if p.required && !params.contains_key(p.name) {
             let alt = match p.name {
-                "symbol" | "symbols" => "root",
-                "expiration" => "exp",
-                "interval" => "ivl",
                 _ => "",
             };
             if alt.is_empty() || !params.contains_key(alt) {
@@ -103,8 +100,8 @@ pub async fn generic(
     }
 
     let use_csv = params
-        .get("use_csv")
-        .is_some_and(|v| v.eq_ignore_ascii_case("true") || v == "1");
+        .get("format")
+        .is_some_and(|v| v.eq_ignore_ascii_case("csv"));
 
     let result = dispatch(state.client(), ep, &params).await;
 
@@ -159,13 +156,18 @@ async fn dispatch(
     params: &HashMap<String, String>,
 ) -> Result<sonic_rs::Value, thetadatadx::Error> {
     // Shorthand closures for common param extraction.
-    let sym = || get_param(params, "symbol", "root");
-    let syms_str = || get_param(params, "symbols", "root");
+    let sym = || get_param(params, "symbol", "symbol");
+    let syms_str = || {
+        params
+            .get("symbol")
+            .cloned()
+            .unwrap_or_default()
+    };
     let start = || get_param(params, "start_date", "start_date");
     let end = || get_param(params, "end_date", "end_date");
     let date = || get_param(params, "date", "date");
     let interval = || {
-        let v = get_param(params, "interval", "ivl");
+        let v = get_param(params, "interval", "interval");
         if v.is_empty() {
             "60000".to_string()
         } else {
@@ -173,14 +175,14 @@ async fn dispatch(
         }
     };
     let interval_quote = || {
-        let v = get_param(params, "interval", "ivl");
+        let v = get_param(params, "interval", "interval");
         if v.is_empty() {
             "0".to_string()
         } else {
             v
         }
     };
-    let exp = || get_param(params, "expiration", "exp");
+    let exp = || get_param(params, "expiration", "expiration");
     let strike = || get_param(params, "strike", "strike");
     let right = || get_param(params, "right", "right");
     let request_type = || get_param(params, "request_type", "request_type");
@@ -202,33 +204,25 @@ async fn dispatch(
         "stock_snapshot_ohlc" => {
             let s = syms_str();
             let syms = parse_symbols(&s);
-            let ticks = client
-                .stock_snapshot_ohlc(&syms)
-                .await?;
+            let ticks = client.stock_snapshot_ohlc(&syms).await?;
             Ok(format::ok_envelope(format::ohlc_ticks_to_json(&ticks)))
         }
         "stock_snapshot_trade" => {
             let s = syms_str();
             let syms = parse_symbols(&s);
-            let ticks = client
-                .stock_snapshot_trade(&syms)
-                .await?;
+            let ticks = client.stock_snapshot_trade(&syms).await?;
             Ok(format::ok_envelope(format::trade_ticks_to_json(&ticks)))
         }
         "stock_snapshot_quote" => {
             let s = syms_str();
             let syms = parse_symbols(&s);
-            let ticks = client
-                .stock_snapshot_quote(&syms)
-                .await?;
+            let ticks = client.stock_snapshot_quote(&syms).await?;
             Ok(format::ok_envelope(format::quote_ticks_to_json(&ticks)))
         }
         "stock_snapshot_market_value" => {
             let s = syms_str();
             let syms = parse_symbols(&s);
-            let ticks = client
-                .stock_snapshot_market_value(&syms)
-                .await?;
+            let ticks = client.stock_snapshot_market_value(&syms).await?;
             Ok(format::ok_envelope(format::market_value_ticks_to_json(
                 &ticks,
             )))
@@ -241,45 +235,28 @@ async fn dispatch(
         }
         "stock_history_ohlc" => {
             let ticks = client
-                .stock_history_ohlc(
-                    &sym(),
-                    &date(),
-                    &interval(),
-                )
+                .stock_history_ohlc(&sym(), &date(), &interval())
                 .await?;
             Ok(format::ok_envelope(format::ohlc_ticks_to_json(&ticks)))
         }
         "stock_history_ohlc_range" => {
             let ticks = client
-                .stock_history_ohlc_range(
-                    &sym(),
-                    &start(),
-                    &end(),
-                    &interval(),
-                )
+                .stock_history_ohlc_range(&sym(), &start(), &end(), &interval())
                 .await?;
             Ok(format::ok_envelope(format::ohlc_ticks_to_json(&ticks)))
         }
         "stock_history_trade" => {
-            let ticks = client
-                .stock_history_trade(&sym(), &date())
-                .await?;
+            let ticks = client.stock_history_trade(&sym(), &date()).await?;
             Ok(format::ok_envelope(format::trade_ticks_to_json(&ticks)))
         }
         "stock_history_quote" => {
             let ticks = client
-                .stock_history_quote(
-                    &sym(),
-                    &date(),
-                    &interval_quote(),
-                )
+                .stock_history_quote(&sym(), &date(), &interval_quote())
                 .await?;
             Ok(format::ok_envelope(format::quote_ticks_to_json(&ticks)))
         }
         "stock_history_trade_quote" => {
-            let ticks = client
-                .stock_history_trade_quote(&sym(), &date())
-                .await?;
+            let ticks = client.stock_history_trade_quote(&sym(), &date()).await?;
             Ok(format::ok_envelope(format::trade_quote_ticks_to_json(
                 &ticks,
             )))
@@ -288,23 +265,13 @@ async fn dispatch(
         // ── Stock At-Time (2) ───────────────────────────────────────
         "stock_at_time_trade" => {
             let ticks = client
-                .stock_at_time_trade(
-                    &sym(),
-                    &start(),
-                    &end(),
-                    &time_of_day(),
-                )
+                .stock_at_time_trade(&sym(), &start(), &end(), &time_of_day())
                 .await?;
             Ok(format::ok_envelope(format::trade_ticks_to_json(&ticks)))
         }
         "stock_at_time_quote" => {
             let ticks = client
-                .stock_at_time_quote(
-                    &sym(),
-                    &start(),
-                    &end(),
-                    &time_of_day(),
-                )
+                .stock_at_time_quote(&sym(), &start(), &end(), &time_of_day())
                 .await?;
             Ok(format::ok_envelope(format::quote_ticks_to_json(&ticks)))
         }
@@ -358,12 +325,7 @@ async fn dispatch(
         }
         "option_snapshot_open_interest" => {
             let ticks = client
-                .option_snapshot_open_interest(
-                    &sym(),
-                    &exp(),
-                    &strike(),
-                    &right(),
-                )
+                .option_snapshot_open_interest(&sym(), &exp(), &strike(), &right())
                 .await?;
             Ok(format::ok_envelope(format::open_interest_ticks_to_json(
                 &ticks,
@@ -371,12 +333,7 @@ async fn dispatch(
         }
         "option_snapshot_market_value" => {
             let ticks = client
-                .option_snapshot_market_value(
-                    &sym(),
-                    &exp(),
-                    &strike(),
-                    &right(),
-                )
+                .option_snapshot_market_value(&sym(), &exp(), &strike(), &right())
                 .await?;
             Ok(format::ok_envelope(format::market_value_ticks_to_json(
                 &ticks,
@@ -384,56 +341,31 @@ async fn dispatch(
         }
         "option_snapshot_greeks_implied_volatility" => {
             let ticks = client
-                .option_snapshot_greeks_implied_volatility(
-                    &sym(),
-                    &exp(),
-                    &strike(),
-                    &right(),
-                )
+                .option_snapshot_greeks_implied_volatility(&sym(), &exp(), &strike(), &right())
                 .await?;
             Ok(format::ok_envelope(format::iv_ticks_to_json(&ticks)))
         }
         "option_snapshot_greeks_all" => {
             let ticks = client
-                .option_snapshot_greeks_all(
-                    &sym(),
-                    &exp(),
-                    &strike(),
-                    &right(),
-                )
+                .option_snapshot_greeks_all(&sym(), &exp(), &strike(), &right())
                 .await?;
             Ok(format::ok_envelope(format::greeks_ticks_to_json(&ticks)))
         }
         "option_snapshot_greeks_first_order" => {
             let ticks = client
-                .option_snapshot_greeks_first_order(
-                    &sym(),
-                    &exp(),
-                    &strike(),
-                    &right(),
-                )
+                .option_snapshot_greeks_first_order(&sym(), &exp(), &strike(), &right())
                 .await?;
             Ok(format::ok_envelope(format::greeks_ticks_to_json(&ticks)))
         }
         "option_snapshot_greeks_second_order" => {
             let ticks = client
-                .option_snapshot_greeks_second_order(
-                    &sym(),
-                    &exp(),
-                    &strike(),
-                    &right(),
-                )
+                .option_snapshot_greeks_second_order(&sym(), &exp(), &strike(), &right())
                 .await?;
             Ok(format::ok_envelope(format::greeks_ticks_to_json(&ticks)))
         }
         "option_snapshot_greeks_third_order" => {
             let ticks = client
-                .option_snapshot_greeks_third_order(
-                    &sym(),
-                    &exp(),
-                    &strike(),
-                    &right(),
-                )
+                .option_snapshot_greeks_third_order(&sym(), &exp(), &strike(), &right())
                 .await?;
             Ok(format::ok_envelope(format::greeks_ticks_to_json(&ticks)))
         }
@@ -447,26 +379,13 @@ async fn dispatch(
         }
         "option_history_ohlc" => {
             let ticks = client
-                .option_history_ohlc(
-                    &sym(),
-                    &exp(),
-                    &strike(),
-                    &right(),
-                    &date(),
-                    &interval(),
-                )
+                .option_history_ohlc(&sym(), &exp(), &strike(), &right(), &date(), &interval())
                 .await?;
             Ok(format::ok_envelope(format::ohlc_ticks_to_json(&ticks)))
         }
         "option_history_trade" => {
             let ticks = client
-                .option_history_trade(
-                    &sym(),
-                    &exp(),
-                    &strike(),
-                    &right(),
-                    &date(),
-                )
+                .option_history_trade(&sym(), &exp(), &strike(), &right(), &date())
                 .await?;
             Ok(format::ok_envelope(format::trade_ticks_to_json(&ticks)))
         }
@@ -485,13 +404,7 @@ async fn dispatch(
         }
         "option_history_trade_quote" => {
             let ticks = client
-                .option_history_trade_quote(
-                    &sym(),
-                    &exp(),
-                    &strike(),
-                    &right(),
-                    &date(),
-                )
+                .option_history_trade_quote(&sym(), &exp(), &strike(), &right(), &date())
                 .await?;
             Ok(format::ok_envelope(format::trade_quote_ticks_to_json(
                 &ticks,
@@ -499,13 +412,7 @@ async fn dispatch(
         }
         "option_history_open_interest" => {
             let ticks = client
-                .option_history_open_interest(
-                    &sym(),
-                    &exp(),
-                    &strike(),
-                    &right(),
-                    &date(),
-                )
+                .option_history_open_interest(&sym(), &exp(), &strike(), &right(), &date())
                 .await?;
             Ok(format::ok_envelope(format::open_interest_ticks_to_json(
                 &ticks,
@@ -515,14 +422,7 @@ async fn dispatch(
         // ── Option History Greeks (12) ──────────────────────────────
         "option_history_greeks_eod" => {
             let ticks = client
-                .option_history_greeks_eod(
-                    &sym(),
-                    &exp(),
-                    &strike(),
-                    &right(),
-                    &start(),
-                    &end(),
-                )
+                .option_history_greeks_eod(&sym(), &exp(), &strike(), &right(), &start(), &end())
                 .await?;
             Ok(format::ok_envelope(format::greeks_ticks_to_json(&ticks)))
         }
@@ -541,13 +441,7 @@ async fn dispatch(
         }
         "option_history_trade_greeks_all" => {
             let ticks = client
-                .option_history_trade_greeks_all(
-                    &sym(),
-                    &exp(),
-                    &strike(),
-                    &right(),
-                    &date(),
-                )
+                .option_history_trade_greeks_all(&sym(), &exp(), &strike(), &right(), &date())
                 .await?;
             Ok(format::ok_envelope(format::greeks_ticks_to_json(&ticks)))
         }
@@ -696,25 +590,19 @@ async fn dispatch(
         "index_snapshot_ohlc" => {
             let s = syms_str();
             let syms = parse_symbols(&s);
-            let ticks = client
-                .index_snapshot_ohlc(&syms)
-                .await?;
+            let ticks = client.index_snapshot_ohlc(&syms).await?;
             Ok(format::ok_envelope(format::ohlc_ticks_to_json(&ticks)))
         }
         "index_snapshot_price" => {
             let s = syms_str();
             let syms = parse_symbols(&s);
-            let ticks = client
-                .index_snapshot_price(&syms)
-                .await?;
+            let ticks = client.index_snapshot_price(&syms).await?;
             Ok(format::ok_envelope(format::price_ticks_to_json(&ticks)))
         }
         "index_snapshot_market_value" => {
             let s = syms_str();
             let syms = parse_symbols(&s);
-            let ticks = client
-                .index_snapshot_market_value(&syms)
-                .await?;
+            let ticks = client.index_snapshot_market_value(&syms).await?;
             Ok(format::ok_envelope(format::market_value_ticks_to_json(
                 &ticks,
             )))
@@ -733,11 +621,7 @@ async fn dispatch(
         }
         "index_history_price" => {
             let ticks = client
-                .index_history_price(
-                    &sym(),
-                    &date(),
-                    &interval(),
-                )
+                .index_history_price(&sym(), &date(), &interval())
                 .await?;
             Ok(format::ok_envelope(format::price_ticks_to_json(&ticks)))
         }
@@ -785,19 +669,31 @@ async fn dispatch(
 //  System endpoints
 // ---------------------------------------------------------------------------
 
-/// GET /v2/system/mdds/status
+/// GET /v3/system/status -- matches Java terminal system status.
+pub async fn system_status(State(state): State<AppState>) -> Response {
+    let body = sonic_rs::json!({
+        "status": state.mdds_status(),
+        "version": env!("CARGO_PKG_VERSION")
+    });
+    json_response(&body)
+}
+
+/// GET /v3/system/mdds/status
 pub async fn system_mdds_status(State(state): State<AppState>) -> Response {
     let body = format::ok_envelope(vec![sonic_rs::Value::from(state.mdds_status())]);
     json_response(&body)
 }
 
-/// GET /v2/system/fpss/status
+/// GET /v3/system/fpss/status
 pub async fn system_fpss_status(State(state): State<AppState>) -> Response {
-    let body = format::ok_envelope(vec![sonic_rs::Value::from(state.fpss_status())]);
+    let body = sonic_rs::json!({
+        "status": state.fpss_status(),
+        "version": env!("CARGO_PKG_VERSION")
+    });
     json_response(&body)
 }
 
-/// GET /v2/system/shutdown -- requires `X-Shutdown-Token` header.
+/// GET /v3/system/shutdown -- requires `X-Shutdown-Token` header.
 pub async fn system_shutdown(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let token = headers
         .get("X-Shutdown-Token")

@@ -111,6 +111,19 @@ for (auto& bar : bars) {
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34200000, "open": 6820.51, "high": 6825.40, "low": 6815.23, "close": 6823.18},
+  {"date": 20260402, "ms_of_day": 34260000, "open": 6823.18, "high": 6830.55, "low": 6820.12, "close": 6828.42},
+  {"date": 20260402, "ms_of_day": 34320000, "open": 6828.42, "high": 6835.67, "low": 6826.09, "close": 6834.15}
+]
+```
+
+> SPX 1-minute OHLC bars. Requires Standard subscription.
+
 ## Notes
 
 - Shorthand is supported: `"1m"`, `"5m"`, `"15m"`, `"1h"`. Milliseconds (`"60000"`, `"300000"`, `"900000"`, `"3600000"`) are auto-converted to the nearest valid preset.

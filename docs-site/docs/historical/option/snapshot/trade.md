@@ -83,3 +83,14 @@ auto trades = client.option_snapshot_trade("SPY", "20241220", "500", "C");
 <div class="param-desc">Exchange code</div>
 </div>
 </div>
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34203497, "price": 98.59, "size": 1, "expiration": 20260417, "strike": 550.0}
+]
+```
+
+> Latest trade for SPY 2026-04-17 550 call.
+

@@ -149,6 +149,18 @@ int main() {
 ```
 :::
 
+### Sample Response
+
+```json
+[
+  {"date": 20260302, "open": 678.62, "high": 688.62, "low": 678.02, "close": 686.38, "volume": 87115983, "bid": 685.86, "ask": 685.90},
+  {"date": 20260303, "open": 674.95, "high": 682.61, "low": 669.66, "close": 680.33, "volume": 104510616, "bid": 679.20, "ask": 679.26},
+  {"date": 20260304, "open": 681.58, "high": 687.09, "low": 679.62, "close": 685.13, "volume": 78815016, "bid": 685.45, "ask": 685.60}
+]
+```
+
+> SPY end-of-day data. Prices shown as f64 (decoded from fixed-point). All endpoints return structured data with the same JSON-like shape across SDKs.
+
 ## With pandas DataFrames (Python)
 
 The Python SDK provides convenience methods that return pandas DataFrames directly:

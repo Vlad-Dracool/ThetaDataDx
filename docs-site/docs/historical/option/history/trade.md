@@ -102,6 +102,17 @@ auto trades = client.option_history_trade("SPY", "20241220", "500", "C", "202403
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34203497, "price": 98.59, "size": 1, "condition": 130, "exchange": 6}
+]
+```
+
+> Trades for SPY 2026-04-17 550 call on 2026-04-02. Deep ITM options may have only 1-2 trades per day.
+
 ## Notes
 
 - For liquid contracts, this can return hundreds of thousands of rows. In Rust, use the `_stream` variant to process in chunks.

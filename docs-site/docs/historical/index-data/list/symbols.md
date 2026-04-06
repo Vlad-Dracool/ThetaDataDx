@@ -50,6 +50,15 @@ None.
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+["SPX", "NDX", "VIX", "RUT", "DJI"]
+```
+
+> Returns 13,000+ index symbols. Shown cropped to 5 major indices.
+
 ## Notes
 
 - Call this endpoint once at startup to discover available index symbols.

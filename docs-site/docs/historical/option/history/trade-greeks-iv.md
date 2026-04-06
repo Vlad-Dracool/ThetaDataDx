@@ -139,6 +139,17 @@ Parameters are identical to [option_history_trade_greeks_all](./trade-greeks-all
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34203497, "implied_volatility": 0.429000, "iv_error": 0.0}
+]
+```
+
+> IV computed at each trade execution. Requires Professional subscription.
+
 ## Notes
 
 - Provides per-trade IV, which is useful for analyzing IV dynamics around large trades or sweeps.

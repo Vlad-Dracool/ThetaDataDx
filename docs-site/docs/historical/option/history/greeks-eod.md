@@ -125,6 +125,19 @@ auto g = client.option_history_greeks_eod("SPY", "20241220", "500", "C",
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260302, "implied_volatility": 0.0, "delta": 1.0, "gamma": 0.0, "theta": 0.0, "vega": 0.0, "rho": 0.0},
+  {"date": 20260304, "implied_volatility": 0.2802, "delta": 0.9912, "gamma": 0.0003, "theta": -0.0725, "vega": 5.5669, "rho": 63.7867},
+  {"date": 20260305, "implied_volatility": 0.2773, "delta": 0.9913, "gamma": 0.0003, "theta": -0.0704, "vega": 5.4231, "rho": 62.8102}
+]
+```
+
+> EOD Greeks for SPY 2026-04-17 550 call. Deep ITM calls show delta near 1.0. IV of 0.0 indicates the solver could not converge.
+
 ## Notes
 
 - EOD Greeks are computed using the closing price. Use `underlyer_use_nbbo` to switch to the NBBO midpoint.

@@ -72,6 +72,17 @@ auto oi = client.option_snapshot_open_interest("SPY", "20241220", "500", "C");
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "open_interest": 32, "expiration": 20260417, "strike": 550.0}
+]
+```
+
+> Open interest for SPY 2026-04-17 550 call.
+
 ## Notes
 
 - Open interest is reported once per day, typically reflecting the previous day's settlement.

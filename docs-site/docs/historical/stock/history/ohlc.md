@@ -142,6 +142,19 @@ auto bars = client.stock_history_ohlc_range("AAPL", "20240101", "20240301", "300
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34200000, "open": 646.42, "high": 647.47, "low": 646.38, "close": 646.86, "volume": 727186, "count": 10708},
+  {"date": 20260402, "ms_of_day": 34260000, "open": 646.85, "high": 647.44, "low": 646.69, "close": 647.37, "volume": 282666, "count": 3331},
+  {"date": 20260402, "ms_of_day": 34320000, "open": 647.35, "high": 647.39, "low": 646.57, "close": 646.63, "volume": 329227, "count": 3967}
+]
+```
+
+> SPY 1-minute bars on 2026-04-02. Full response contains 391 bars.
+
 ## Common Intervals
 
 | Shorthand | Milliseconds |

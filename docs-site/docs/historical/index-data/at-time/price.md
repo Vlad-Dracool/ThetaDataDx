@@ -79,6 +79,19 @@ Returns a `Vec<PriceTick>` with one entry per trading day:
 | 12:00 PM | `43200000` |
 | 4:00 PM | `57600000` |
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260330, "ms_of_day": 43200000, "price": 6742.18},
+  {"date": 20260331, "ms_of_day": 43200000, "price": 6768.45},
+  {"date": 20260401, "ms_of_day": 43200000, "price": 6891.33}
+]
+```
+
+> SPX price at 12:00 PM ET on each date. One row per date in the range. Requires Value subscription.
+
 ## Notes
 
 - Returns the price at or just before the specified time of day.

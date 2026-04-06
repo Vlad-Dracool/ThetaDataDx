@@ -1,8 +1,8 @@
-//! HTTP authentication against the ThetaData Nexus API.
+//! HTTP authentication against the `ThetaData` Nexus API.
 //!
 //! # Protocol (from decompiled Java — `AuthenticationManager.authenticateViaCloud()`)
 //!
-//! The Java terminal authenticates by POSTing to the Nexus API:
+//! The Java terminal authenticates by `POSTing` to the Nexus API:
 //!
 //! ```text
 //! POST https://nexus-api.thetadata.us/identity/terminal/auth_user
@@ -119,6 +119,7 @@ impl AuthUser {
     /// - PROFESSIONAL/PRO = 3 -> 8 concurrent requests
     ///
     /// Source: Java terminal `MddsConnectionManager` — `2^subscription_tier`.
+    #[must_use]
     pub fn max_concurrent_requests(&self) -> usize {
         let tier = [
             self.stock_subscription,
@@ -129,12 +130,27 @@ impl AuthUser {
         .iter()
         .filter_map(|s| *s)
         .max()
-        .unwrap_or(0) as usize;
+        .unwrap_or(0);
+        let tier = usize::try_from(tier).unwrap_or(0);
         1usize << tier // 2^tier: 1, 2, 4, 8
     }
 }
 
 // -- Public API --
+
+/// Maximum number of retry attempts for transient network errors during auth.
+const AUTH_MAX_RETRIES: u32 = 3;
+
+/// Delay between auth retry attempts.
+const AUTH_RETRY_DELAY: Duration = Duration::from_secs(2);
+
+/// Check whether a `reqwest` error is a transient network error worth retrying.
+///
+/// Returns `true` for connection refused, timeouts, and DNS failures.
+/// Returns `false` for auth failures (wrong password) and server-side rejections.
+fn is_transient_network_error(err: &reqwest::Error) -> bool {
+    err.is_connect() || err.is_timeout()
+}
 
 /// Authenticate against the Nexus API and return the session info.
 ///
@@ -143,9 +159,17 @@ impl AuthUser {
 ///
 /// The returned `AuthResponse.session_id` is a UUID string that must be
 /// embedded in every MDDS gRPC request as `QueryInfo.auth_token.session_uuid`.
+///
+/// Transient network errors (connection refused, timeout, DNS failure) are
+/// retried up to 3 times with 2-second delays. Auth failures (wrong password,
+/// invalid credentials) are NOT retried.
+///
+/// # Errors
+///
+/// Returns an error on network, authentication, or parsing failure.
 pub async fn authenticate(creds: &Credentials) -> Result<AuthResponse, Error> {
     metrics::counter!("thetadatadx.auth.requests").increment(1);
-    let _auth_start = std::time::Instant::now();
+    let auth_start = std::time::Instant::now();
 
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
@@ -164,14 +188,42 @@ pub async fn authenticate(creds: &Credentials) -> Result<AuthResponse, Error> {
         "authenticating against Nexus API"
     );
 
-    let resp = client
-        .post(NEXUS_AUTH_URL)
-        .header(TERMINAL_KEY_HEADER, TERMINAL_KEY)
-        .header("Accept", "application/json")
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| Error::Auth(format!("Nexus API request failed: {e}")))?;
+    // Retry loop for transient network errors (connection refused, timeout, DNS).
+    // Auth failures (wrong password, 401/404) are NOT retried.
+    let mut last_err: Option<reqwest::Error> = None;
+    let resp = 'retry: {
+        for attempt in 1..=AUTH_MAX_RETRIES {
+            match client
+                .post(NEXUS_AUTH_URL)
+                .header(TERMINAL_KEY_HEADER, TERMINAL_KEY)
+                .header("Accept", "application/json")
+                .json(&body)
+                .send()
+                .await
+            {
+                Ok(r) => break 'retry r,
+                Err(e) if is_transient_network_error(&e) && attempt < AUTH_MAX_RETRIES => {
+                    tracing::warn!(
+                        attempt,
+                        max = AUTH_MAX_RETRIES,
+                        error = %e,
+                        delay_secs = AUTH_RETRY_DELAY.as_secs(),
+                        "Nexus auth request failed (transient), retrying"
+                    );
+                    last_err = Some(e);
+                    tokio::time::sleep(AUTH_RETRY_DELAY).await;
+                }
+                Err(e) => {
+                    return Err(Error::Auth(format!("Nexus API request failed: {e}")));
+                }
+            }
+        }
+        // All retries exhausted (should not reach here, but handle defensively).
+        return Err(Error::Auth(format!(
+            "Nexus API request failed after {AUTH_MAX_RETRIES} retries: {}",
+            last_err.map_or_else(|| "unknown".to_string(), |e| e.to_string())
+        )));
+    };
 
     let status = resp.status();
     // Java special-cases 401 and 404 as "invalid credentials".
@@ -210,7 +262,7 @@ pub async fn authenticate(creds: &Credentials) -> Result<AuthResponse, Error> {
     );
 
     metrics::histogram!("thetadatadx.auth.latency_ms")
-        .record(_auth_start.elapsed().as_millis() as f64);
+        .record(auth_start.elapsed().as_secs_f64() * 1_000.0);
 
     Ok(auth)
 }
@@ -226,6 +278,9 @@ pub struct SessionToken {
 
 impl SessionToken {
     /// Extract and validate the session token from an auth response.
+    /// # Errors
+    ///
+    /// Returns an error on network, authentication, or parsing failure.
     pub fn from_response(resp: &AuthResponse) -> Result<Self, Error> {
         let _uuid = Uuid::parse_str(&resp.session_id)
             .map_err(|e| Error::Auth(format!("invalid session UUID '{}': {e}", resp.session_id)))?;

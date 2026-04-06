@@ -50,6 +50,17 @@ auto mv = client.stock_snapshot_market_value({"AAPL"});
 
 `Vec<MarketValueTick>` with market value fields. The exact fields depend on the data available for the requested symbols.
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "market_cap": 3842000000000, "shares_outstanding": 15022100000, "enterprise_value": 3756000000000}
+]
+```
+
+> Market capitalization, shares outstanding, and enterprise value for each requested symbol.
+
 ## Notes
 
 - Accepts multiple symbols in a single call.

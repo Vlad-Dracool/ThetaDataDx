@@ -74,6 +74,18 @@ auto oi = client.option_history_open_interest("SPY", "20241220", "500", "C", "20
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260401, "open_interest": 28},
+  {"date": 20260402, "open_interest": 32}
+]
+```
+
+> Daily open interest for a specific option contract.
+
 ## Notes
 
 - Open interest is typically reported once per day based on the previous day's settlement.

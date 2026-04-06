@@ -189,20 +189,6 @@ typedef struct __attribute__((aligned(64))) {
 typedef struct __attribute__((aligned(64))) {
     int32_t ms_of_day;
     int32_t sequence;
-    int32_t size;
-    int32_t condition;
-    int32_t price;
-    int32_t price_type;
-    int32_t date;
-    int32_t expiration;
-    int32_t strike;
-    int32_t right;
-    int32_t strike_price_type;
-} TdxSnapshotTradeTick;
-
-typedef struct __attribute__((aligned(64))) {
-    int32_t ms_of_day;
-    int32_t sequence;
     int32_t ext_condition1;
     int32_t ext_condition2;
     int32_t ext_condition3;
@@ -271,7 +257,6 @@ typedef struct { const TdxOpenInterestTick* data; size_t len; } TdxOpenInterestT
 typedef struct { const TdxMarketValueTick* data; size_t len; } TdxMarketValueTickArray;
 typedef struct { const TdxCalendarDay* data; size_t len; } TdxCalendarDayArray;
 typedef struct { const TdxInterestRateTick* data; size_t len; } TdxInterestRateTickArray;
-typedef struct { const TdxSnapshotTradeTick* data; size_t len; } TdxSnapshotTradeTickArray;
 typedef struct { const TdxTradeQuoteTick* data; size_t len; } TdxTradeQuoteTickArray;
 
 /* ── OptionContract (has heap-allocated root string) ── */
@@ -347,7 +332,6 @@ void tdx_open_interest_tick_array_free(TdxOpenInterestTickArray arr);
 void tdx_market_value_tick_array_free(TdxMarketValueTickArray arr);
 void tdx_calendar_day_array_free(TdxCalendarDayArray arr);
 void tdx_interest_rate_tick_array_free(TdxInterestRateTickArray arr);
-void tdx_snapshot_trade_tick_array_free(TdxSnapshotTradeTickArray arr);
 void tdx_trade_quote_tick_array_free(TdxTradeQuoteTickArray arr);
 void tdx_option_contract_array_free(TdxOptionContractArray arr);
 void tdx_string_array_free(TdxStringArray arr);
@@ -399,6 +383,13 @@ void tdx_config_set_reconnect_policy(TdxConfig* config, int policy);
  *   mode=1: Immediate -- flush after every frame write.
  */
 void tdx_config_set_flush_mode(TdxConfig* config, int mode);
+
+/**
+ * Set FPSS OHLCVC derivation on a config handle.
+ *   enabled=1 (default): derive OHLCVC bars locally from trade events.
+ *   enabled=0: only emit server-sent OHLCVC frames (lower overhead).
+ */
+void tdx_config_set_derive_ohlcvc(TdxConfig* config, int enabled);
 
 /* ── Client ── */
 

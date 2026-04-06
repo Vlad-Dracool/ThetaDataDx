@@ -126,3 +126,15 @@ Parameters are identical to [option_history_greeks_all](./greeks-all#parameters)
 <div class="param-desc">Milliseconds from midnight</div>
 </div>
 </div>
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34260000, "implied_volatility": 0.4445, "delta": 0.9686, "theta": -0.1898, "vega": 9.2497, "rho": 21.7056, "epsilon": -25.7503, "lambda": 6.3665},
+  {"date": 20260402, "ms_of_day": 34320000, "implied_volatility": 0.4350, "delta": 0.9718, "theta": -0.1757, "vega": 8.4631, "rho": 21.7944, "epsilon": -25.8555, "lambda": 6.3666}
+]
+```
+
+> First-order Greeks at 1-minute intervals for SPY 2026-04-17 550 call.
+

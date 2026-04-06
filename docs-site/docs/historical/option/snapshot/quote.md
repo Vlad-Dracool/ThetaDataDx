@@ -95,3 +95,14 @@ auto quotes = client.option_snapshot_quote("SPY", "20241220", "500", "C");
 <div class="param-desc">Ask exchange code</div>
 </div>
 </div>
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 58497982, "bid": 105.73, "ask": 108.52, "bid_size": 2, "ask_size": 10, "expiration": 20260417, "strike": 550.0}
+]
+```
+
+> Latest NBBO quote for SPY 2026-04-17 550 call.
+

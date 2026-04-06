@@ -161,6 +161,28 @@ auto g = client.option_history_greeks_all("SPY", "20241220", "500", "C",
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {
+    "date": 20260402, "ms_of_day": 34260000,
+    "implied_volatility": 0.4445, "delta": 0.9686, "gamma": 0.000892,
+    "theta": -0.1898, "vega": 9.2497, "rho": 21.7056,
+    "vanna": -0.0312, "charm": 0.0025, "vomma": 0.0198,
+    "speed": -0.0000112, "zomma": 0.0000612, "color": -0.0000042, "ultima": 0.000168
+  },
+  {
+    "date": 20260402, "ms_of_day": 34320000,
+    "implied_volatility": 0.4350, "delta": 0.9718, "gamma": 0.000815,
+    "theta": -0.1757, "vega": 8.4631, "rho": 21.7944
+  }
+]
+```
+
+> All Greeks at 1-minute intervals for SPY 2026-04-17 550 call. Requires Professional subscription.
+
 ## Notes
 
 - If you only need a subset of Greeks, use [greeks-first-order](./greeks-first-order), [greeks-second-order](./greeks-second-order), or [greeks-third-order](./greeks-third-order) to reduce payload size.

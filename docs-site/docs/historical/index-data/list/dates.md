@@ -51,6 +51,15 @@ std::cout << "Available from " << dates.front() << " to " << dates.back() << std
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+["20160801", "20160802", "...", "20260401", "20260402"]
+```
+
+> Returns all dates with data for the specified index. SPX has 2,325 dates available.
+
 ## Notes
 
 - Use this to determine the date range for which index data is available before making history or EOD calls.

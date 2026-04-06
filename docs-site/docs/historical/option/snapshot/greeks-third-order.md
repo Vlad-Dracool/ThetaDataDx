@@ -124,6 +124,22 @@ Parameters are identical to [option_snapshot_greeks_all](./greeks-all#parameters
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {
+    "date": 20260402, "ms_of_day": 58497982,
+    "speed": -0.00000841, "zomma": 0.00004523,
+    "color": -0.00000312, "ultima": 0.00012845,
+    "expiration": 20260417, "strike": 550.0
+  }
+]
+```
+
+> Third-order Greeks for SPY 2026-04-17 550 call. Requires Professional subscription.
+
 ## Notes
 
 - Third-order Greeks are primarily used in advanced hedging and risk management scenarios involving large portfolios or exotic strategies.

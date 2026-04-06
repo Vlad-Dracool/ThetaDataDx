@@ -148,3 +148,14 @@ Parameters are identical to [option_history_trade_greeks_all](./trade-greeks-all
 <div class="param-desc">Milliseconds from midnight</div>
 </div>
 </div>
+
+### Sample Response
+
+```json
+[
+  {"date": 20260402, "ms_of_day": 34203497, "implied_volatility": 0.4290, "delta": 0.9742, "theta": -0.1645, "vega": 7.8120, "rho": 21.8812}
+]
+```
+
+> First-order Greeks at each trade. Requires Professional subscription.
+

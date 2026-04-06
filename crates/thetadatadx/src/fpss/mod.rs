@@ -29,7 +29,7 @@
 //! # fn example() -> Result<(), thetadatadx::error::Error> {
 //! let creds = Credentials::new("user@example.com", "pw");
 //! let hosts = thetadatadx::config::DirectConfig::production().fpss_hosts;
-//! let client = FpssClient::connect(&creds, &hosts, 4096, Default::default(), Default::default(), |event: &FpssEvent| {
+//! let client = FpssClient::connect(&creds, &hosts, 4096, Default::default(), Default::default(), true, |event: &FpssEvent| {
 //!     // Runs on the Disruptor consumer thread -- keep it fast.
 //!     // Push to your own queue for heavy processing.
 //!     match event {
@@ -91,7 +91,7 @@ use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::mpsc as std_mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use disruptor::{build_single_producer, Producer, Sequence};
 
@@ -124,7 +124,7 @@ use self::protocol::{
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum FpssData {
-    /// Decoded quote tick (code 21). 11 FIT fields + contract_id.
+    /// Decoded quote tick (code 21). 11 FIT fields + `contract_id`.
     Quote {
         contract_id: i32,
         ms_of_day: i32,
@@ -145,7 +145,7 @@ pub enum FpssData {
         /// Wall-clock nanoseconds since UNIX epoch, captured at frame decode time.
         received_at_ns: u64,
     },
-    /// Decoded trade tick (code 22). 16 FIT fields + contract_id.
+    /// Decoded trade tick (code 22). 16 FIT fields + `contract_id`.
     Trade {
         contract_id: i32,
         ms_of_day: i32,
@@ -169,7 +169,7 @@ pub enum FpssData {
         /// Wall-clock nanoseconds since UNIX epoch, captured at frame decode time.
         received_at_ns: u64,
     },
-    /// Decoded open interest tick (code 23). 3 FIT fields + contract_id.
+    /// Decoded open interest tick (code 23). 3 FIT fields + `contract_id`.
     OpenInterest {
         contract_id: i32,
         ms_of_day: i32,
@@ -277,7 +277,7 @@ enum IoCommand {
 // FpssClient
 // ---------------------------------------------------------------------------
 
-/// Real-time streaming client for ThetaData's FPSS servers.
+/// Real-time streaming client for `ThetaData`'s FPSS servers.
 ///
 /// # Lifecycle (from `FPSSClient.java`)
 ///
@@ -320,7 +320,7 @@ pub struct FpssClient {
 unsafe impl Sync for FpssClient {}
 
 impl FpssClient {
-    /// Connect to a ThetaData FPSS server, authenticate, and start processing
+    /// Connect to a `ThetaData` FPSS server, authenticate, and start processing
     /// events via the provided callback.
     ///
     /// The callback runs on the Disruptor's consumer thread -- keep it fast.
@@ -331,22 +331,32 @@ impl FpssClient {
     /// 1. Try each server in `hosts` until one connects (blocking TLS over TCP)
     /// 2. Send CREDENTIALS (code 0) with email + password
     /// 3. Wait for METADATA (code 3) = login success, or DISCONNECTED (code 12) = failure
-    /// 4. Start ping heartbeat (100ms interval, std::thread with sleep loop)
+    /// 4. Start ping heartbeat (100ms interval, `std::thread` with sleep loop)
     /// 5. Start I/O thread (blocking TLS read -> Disruptor ring -> callback)
     ///
     /// Source: `FPSSClient.connect()` and `FPSSClient.sendCredentials()`.
-    /// Connect with default settings (OHLCVC derivation enabled).
+    /// Connect to FPSS streaming servers.
     ///
     /// `hosts` is the FPSS server list from [`DirectConfig::fpss_hosts`].
     /// Servers are tried in order until one connects.
     ///
     /// `policy` controls auto-reconnect behavior after involuntary disconnect.
+    ///
+    /// When `derive_ohlcvc` is `false`, the client will NOT emit derived
+    /// `FpssData::Ohlcvc` events after each trade. You still receive
+    /// server-sent OHLCVC frames (wire code 24). This reduces throughput
+    /// overhead by eliminating one extra event per trade.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error`] if the TLS handshake or FPSS authentication fails.
     pub fn connect<F>(
         creds: &Credentials,
         hosts: &[(String, u16)],
         ring_size: usize,
         flush_mode: FpssFlushMode,
         policy: ReconnectPolicy,
+        derive_ohlcvc: bool,
         handler: F,
     ) -> Result<Self, Error>
     where
@@ -358,45 +368,9 @@ impl FpssClient {
             creds,
             stream,
             server_addr,
-            hosts.to_vec(),
+            hosts,
             ring_size,
-            true,
-            flush_mode,
-            policy,
-            handler,
-        )
-    }
-
-    /// Connect with OHLCVC derivation disabled.
-    ///
-    /// When `derive_ohlcvc` is false, the client will NOT emit derived
-    /// `FpssData::Ohlcvc` events after each trade. You still receive
-    /// server-sent OHLCVC frames. This reduces throughput overhead by
-    /// eliminating one extra event per trade.
-    ///
-    /// `hosts` is the FPSS server list from [`DirectConfig::fpss_hosts`].
-    ///
-    /// `policy` controls auto-reconnect behavior after involuntary disconnect.
-    pub fn connect_no_ohlcvc<F>(
-        creds: &Credentials,
-        hosts: &[(String, u16)],
-        ring_size: usize,
-        flush_mode: FpssFlushMode,
-        policy: ReconnectPolicy,
-        handler: F,
-    ) -> Result<Self, Error>
-    where
-        F: FnMut(&FpssEvent) + Send + 'static,
-    {
-        let borrowed: Vec<(&str, u16)> = hosts.iter().map(|(h, p)| (h.as_str(), *p)).collect();
-        let (stream, server_addr) = connection::connect_to_servers(&borrowed)?;
-        Self::connect_with_stream(
-            creds,
-            stream,
-            server_addr,
-            hosts.to_vec(),
-            ring_size,
-            false,
+            derive_ohlcvc,
             flush_mode,
             policy,
             handler,
@@ -407,12 +381,12 @@ impl FpssClient {
     ///
     /// `hosts` is the full FPSS server list, needed for auto-reconnect to try
     /// all servers. Pass an empty slice to disable reconnection to other servers.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)] // Reason: FFI boundary requires all connection params in one call
     pub(crate) fn connect_with_stream<F>(
         creds: &Credentials,
         mut stream: connection::FpssStream,
         server_addr: String,
-        hosts: Vec<(String, u16)>,
+        hosts: &[(String, u16)],
         ring_size: usize,
         derive_ohlcvc: bool,
         flush_mode: FpssFlushMode,
@@ -443,6 +417,17 @@ impl FpssClient {
                 permissions
             }
             LoginResult::Disconnected(reason) => {
+                if matches!(
+                    reason,
+                    RemoveReason::InvalidCredentials
+                        | RemoveReason::InvalidLoginValues
+                        | RemoveReason::InvalidCredentialsNullUser
+                ) {
+                    tracing::warn!(
+                        "FPSS login failed. If your password contains special characters, \
+                         try URL-encoding them."
+                    );
+                }
                 return Err(Error::FpssDisconnected(format!(
                     "server rejected login: {reason:?}"
                 )));
@@ -477,7 +462,7 @@ impl FpssClient {
         let io_contract_map = Arc::clone(&contract_map);
         let io_server_addr = server_addr.clone();
         let io_creds = creds.clone();
-        let io_hosts = hosts.clone();
+        let io_hosts = hosts.to_vec();
 
         let io_handle = thread::Builder::new()
             .name("fpss-io".to_owned())
@@ -533,7 +518,10 @@ impl FpssClient {
     /// # Wire protocol (from `PacketStream.addQuote()`)
     ///
     /// Sends code 21 (QUOTE) with payload `[req_id: i32 BE] [contract bytes]`.
-    /// Server responds with code 40 (REQ_RESPONSE).
+    /// Server responds with code 40 (`REQ_RESPONSE`).
+    /// # Errors
+    ///
+    /// Returns an error on network, authentication, or parsing failure.
     pub fn subscribe_quotes(&self, contract: &Contract) -> Result<i32, Error> {
         self.subscribe(SubscriptionKind::Quote, contract)
     }
@@ -541,20 +529,26 @@ impl FpssClient {
     /// Subscribe to trade data for a contract.
     ///
     /// Source: `PacketStream.addTrade()` -- sends code 22 (TRADE).
+    /// # Errors
+    ///
+    /// Returns an error on network, authentication, or parsing failure.
     pub fn subscribe_trades(&self, contract: &Contract) -> Result<i32, Error> {
         self.subscribe(SubscriptionKind::Trade, contract)
     }
 
     /// Subscribe to open interest data for a contract.
     ///
-    /// Source: `PacketStream.addOpenInterest()` -- sends code 23 (OPEN_INTEREST).
+    /// Source: `PacketStream.addOpenInterest()` -- sends code 23 (`OPEN_INTEREST`).
+    /// # Errors
+    ///
+    /// Returns an error on network, authentication, or parsing failure.
     pub fn subscribe_open_interest(&self, contract: &Contract) -> Result<i32, Error> {
         self.subscribe(SubscriptionKind::OpenInterest, contract)
     }
 
     /// Subscribe to all trades for a security type (full trade stream).
     ///
-    /// # Behavior (from ThetaData server)
+    /// # Behavior (from `ThetaData` server)
     ///
     /// The server sends a **bundle** per trade event (not just trades):
     /// 1. Pre-trade NBBO quote (last quote before the trade)
@@ -565,16 +559,19 @@ impl FpssClient {
     ///
     /// Your callback will receive [`FpssData::Quote`], [`FpssData::Trade`], and
     /// [`FpssData::Ohlcvc`] events interleaved. This is normal behavior from
-    /// the ThetaData FPSS server.
+    /// the `ThetaData` FPSS server.
     ///
-    /// If OHLCVC derivation is enabled (default via [`connect`]), you will also
-    /// receive locally-derived [`FpssData::Ohlcvc`] after each trade. Use
-    /// [`connect_no_ohlcvc`] to disable this and reduce throughput overhead.
+    /// If OHLCVC derivation is enabled (default), you will also
+    /// receive locally-derived [`FpssData::Ohlcvc`] after each trade. Pass
+    /// `derive_ohlcvc: false` to [`connect`] to disable this and reduce throughput overhead.
     ///
     /// # Wire protocol (from `PacketStream.java`)
     ///
     /// Sends code 22 (TRADE) with 5-byte payload `[req_id: i32 BE] [sec_type: u8]`.
     /// The server distinguishes this from per-contract subscriptions by payload length.
+    /// # Errors
+    ///
+    /// Returns an error on network, authentication, or parsing failure.
     pub fn subscribe_full_trades(
         &self,
         sec_type: tdbe::types::enums::SecType,
@@ -598,7 +595,7 @@ impl FpssClient {
             let mut subs = self
                 .active_full_subs
                 .lock()
-                .unwrap_or_else(|e| e.into_inner());
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             subs.push((SubscriptionKind::Trade, sec_type));
         }
 
@@ -611,8 +608,11 @@ impl FpssClient {
     ///
     /// # Wire protocol
     ///
-    /// Sends code 23 (OPEN_INTEREST) with 5-byte payload `[req_id: i32 BE] [sec_type: u8]`.
+    /// Sends code 23 (`OPEN_INTEREST`) with 5-byte payload `[req_id: i32 BE] [sec_type: u8]`.
     /// The server distinguishes this from per-contract subscriptions by payload length.
+    /// # Errors
+    ///
+    /// Returns an error on network, authentication, or parsing failure.
     pub fn subscribe_full_open_interest(
         &self,
         sec_type: tdbe::types::enums::SecType,
@@ -636,7 +636,7 @@ impl FpssClient {
             let mut subs = self
                 .active_full_subs
                 .lock()
-                .unwrap_or_else(|e| e.into_inner());
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             subs.push((SubscriptionKind::OpenInterest, sec_type));
         }
 
@@ -647,8 +647,11 @@ impl FpssClient {
     ///
     /// # Wire protocol
     ///
-    /// Sends code 52 (REMOVE_TRADE) with 5-byte payload `[req_id: i32 BE] [sec_type: u8]`.
+    /// Sends code 52 (`REMOVE_TRADE`) with 5-byte payload `[req_id: i32 BE] [sec_type: u8]`.
     /// Same format as [`subscribe_full_trades`] but with the REMOVE code.
+    /// # Errors
+    ///
+    /// Returns an error on network, authentication, or parsing failure.
     pub fn unsubscribe_full_trades(
         &self,
         sec_type: tdbe::types::enums::SecType,
@@ -670,7 +673,7 @@ impl FpssClient {
             let mut subs = self
                 .active_full_subs
                 .lock()
-                .unwrap_or_else(|e| e.into_inner());
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             subs.retain(|(k, s)| !(k == &SubscriptionKind::Trade && s == &sec_type));
         }
 
@@ -682,8 +685,11 @@ impl FpssClient {
     ///
     /// # Wire protocol
     ///
-    /// Sends code 53 (REMOVE_OPEN_INTEREST) with 5-byte payload `[req_id: i32 BE] [sec_type: u8]`.
+    /// Sends code 53 (`REMOVE_OPEN_INTEREST`) with 5-byte payload `[req_id: i32 BE] [sec_type: u8]`.
     /// Same format as [`subscribe_full_open_interest`] but with the REMOVE code.
+    /// # Errors
+    ///
+    /// Returns an error on network, authentication, or parsing failure.
     pub fn unsubscribe_full_open_interest(
         &self,
         sec_type: tdbe::types::enums::SecType,
@@ -705,7 +711,7 @@ impl FpssClient {
             let mut subs = self
                 .active_full_subs
                 .lock()
-                .unwrap_or_else(|e| e.into_inner());
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             subs.retain(|(k, s)| !(k == &SubscriptionKind::OpenInterest && s == &sec_type));
         }
 
@@ -715,14 +721,20 @@ impl FpssClient {
 
     /// Unsubscribe from quote data for a contract.
     ///
-    /// Source: `PacketStream.removeQuote()` -- sends code 51 (REMOVE_QUOTE).
+    /// Source: `PacketStream.removeQuote()` -- sends code 51 (`REMOVE_QUOTE`).
+    /// # Errors
+    ///
+    /// Returns an error on network, authentication, or parsing failure.
     pub fn unsubscribe_quotes(&self, contract: &Contract) -> Result<i32, Error> {
         self.unsubscribe(SubscriptionKind::Quote, contract)
     }
 
     /// Unsubscribe from trade data for a contract.
     ///
-    /// Source: `PacketStream.removeTrade()` -- sends code 52 (REMOVE_TRADE).
+    /// Source: `PacketStream.removeTrade()` -- sends code 52 (`REMOVE_TRADE`).
+    /// # Errors
+    ///
+    /// Returns an error on network, authentication, or parsing failure.
     pub fn unsubscribe_trades(&self, contract: &Contract) -> Result<i32, Error> {
         self.unsubscribe(SubscriptionKind::Trade, contract)
     }
@@ -730,6 +742,9 @@ impl FpssClient {
     /// Unsubscribe from open interest data for a contract.
     ///
     /// Source: `PacketStream.removeOpenInterest()` -- sends code 53.
+    /// # Errors
+    ///
+    /// Returns an error on network, authentication, or parsing failure.
     pub fn unsubscribe_open_interest(&self, contract: &Contract) -> Result<i32, Error> {
         self.unsubscribe(SubscriptionKind::OpenInterest, contract)
     }
@@ -748,7 +763,10 @@ impl FpssClient {
 
         // Track for reconnection
         {
-            let mut subs = self.active_subs.lock().unwrap_or_else(|e| e.into_inner());
+            let mut subs = self
+                .active_subs
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             subs.push((kind, contract.clone()));
         }
 
@@ -775,7 +793,10 @@ impl FpssClient {
 
         // Remove from tracked subscriptions
         {
-            let mut subs = self.active_subs.lock().unwrap_or_else(|e| e.into_inner());
+            let mut subs = self
+                .active_subs
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             subs.retain(|(k, c)| !(k == &kind && c == contract));
         }
 
@@ -804,14 +825,17 @@ impl FpssClient {
         // Clear active subscriptions on explicit shutdown. Involuntary disconnects
         // preserve the lists so `reconnect()` can re-subscribe automatically.
         {
-            let mut subs = self.active_subs.lock().unwrap_or_else(|e| e.into_inner());
+            let mut subs = self
+                .active_subs
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             subs.clear();
         }
         {
             let mut subs = self
                 .active_full_subs
                 .lock()
-                .unwrap_or_else(|e| e.into_inner());
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             subs.clear();
         }
 
@@ -835,7 +859,7 @@ impl FpssClient {
     pub fn contract_map(&self) -> HashMap<i32, Contract> {
         self.contract_map
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
 
@@ -846,7 +870,7 @@ impl FpssClient {
     pub fn contract_lookup(&self, id: i32) -> Option<Contract> {
         self.contract_map
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(&id)
             .cloned()
     }
@@ -855,7 +879,7 @@ impl FpssClient {
     pub fn active_subscriptions(&self) -> Vec<(SubscriptionKind, Contract)> {
         self.active_subs
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
 
@@ -865,7 +889,7 @@ impl FpssClient {
     ) -> Vec<(SubscriptionKind, tdbe::types::enums::SecType)> {
         self.active_full_subs
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
 
@@ -955,7 +979,12 @@ const MAX_RECONNECT_ATTEMPTS: u32 = 5;
 ///
 /// This thread IS the Disruptor producer. Events flow directly from the TLS
 /// socket into the ring buffer with zero intermediate channels.
-#[allow(clippy::too_many_arguments)]
+// Reason: all parameters are moved into this function from a spawned thread closure.
+#[allow(
+    clippy::too_many_arguments,
+    clippy::needless_pass_by_value,
+    clippy::too_many_lines
+)]
 fn io_loop<F>(
     stream: connection::FpssStream,
     cmd_rx: std_mpsc::Receiver<IoCommand>,
@@ -1146,25 +1175,25 @@ fn io_loop<F>(
                     );
                     break 'session;
                 }
-                match reconnect_delay(reason) {
-                    Some(ms) => Duration::from_millis(ms),
-                    None => {
-                        tracing::error!(reason = ?reason, "permanent disconnect -- not reconnecting");
-                        break 'session;
-                    }
+                if let Some(ms) = reconnect_delay(reason) {
+                    Duration::from_millis(ms)
+                } else {
+                    tracing::error!(reason = ?reason, "permanent disconnect -- not reconnecting");
+                    break 'session;
                 }
             }
-            ReconnectPolicy::Custom(f) => match f(reason, reconnect_attempt) {
-                Some(d) => d,
-                None => {
+            ReconnectPolicy::Custom(f) => {
+                if let Some(d) = f(reason, reconnect_attempt) {
+                    d
+                } else {
                     tracing::info!(reason = ?reason, "custom policy returned None -- not reconnecting");
                     break 'session;
                 }
-            },
+            }
         };
 
         // Emit Reconnecting event before sleeping.
-        let delay_ms = delay.as_millis() as u64;
+        let delay_ms = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX);
         tracing::info!(
             reason = ?reason,
             attempt = reconnect_attempt,
@@ -1226,6 +1255,17 @@ fn io_loop<F>(
                 p
             }
             LoginResult::Disconnected(reason) => {
+                if matches!(
+                    reason,
+                    RemoveReason::InvalidCredentials
+                        | RemoveReason::InvalidLoginValues
+                        | RemoveReason::InvalidCredentialsNullUser
+                ) {
+                    tracing::warn!(
+                        "FPSS login failed. If your password contains special characters, \
+                         try URL-encoding them."
+                    );
+                }
                 tracing::warn!(reason = ?reason, "server rejected login on reconnect");
                 continue 'session;
             }
@@ -1242,7 +1282,7 @@ fn io_loop<F>(
         delta_state.clear();
         contract_map
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clear();
 
         authenticated.store(true, Ordering::Release);
@@ -1302,7 +1342,7 @@ fn io_loop<F>(
     tracing::debug!("fpss-io thread exiting");
 }
 
-/// Check if an error is a read timeout (WouldBlock or TimedOut).
+/// Check if an error is a read timeout (`WouldBlock` or `TimedOut`).
 fn is_read_timeout(e: &Error) -> bool {
     match e {
         Error::Io(io_err) => matches!(
@@ -1317,9 +1357,9 @@ fn is_read_timeout(e: &Error) -> bool {
 // FIT delta state for tick decompression
 // ---------------------------------------------------------------------------
 
-/// Number of FIT fields per tick type (excluding the contract_id which is the
+/// Number of FIT fields per tick type (excluding the `contract_id` which is the
 /// first FIT field). The FIT decoder returns `n_fields` total, where field [0]
-/// is the contract_id and fields [1..] are the tick data.
+/// is the `contract_id` and fields [1..] are the tick data.
 const QUOTE_FIELDS: usize = 11;
 const TRADE_FIELDS: usize = 16;
 const OI_FIELDS: usize = 3;
@@ -1360,7 +1400,7 @@ impl OhlcvcAccumulator {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)] // Reason: OHLCVC bar has many fields from server init message
     fn init_from_server(
         &mut self,
         ms_of_day: i32,
@@ -1386,18 +1426,7 @@ impl OhlcvcAccumulator {
     }
 
     fn process_trade(&mut self, ms_of_day: i32, price: i32, size: i32, price_type: i32, date: i32) {
-        if !self.initialized {
-            self.open = price;
-            self.high = price;
-            self.low = price;
-            self.close = price;
-            self.volume = i64::from(size);
-            self.count = 1;
-            self.price_type = price_type;
-            self.date = date;
-            self.ms_of_day = ms_of_day;
-            self.initialized = true;
-        } else {
+        if self.initialized {
             self.ms_of_day = ms_of_day;
             let adjusted_price = change_price_type(price, price_type, self.price_type);
             self.volume += i64::from(size);
@@ -1409,15 +1438,25 @@ impl OhlcvcAccumulator {
                 self.low = adjusted_price;
             }
             self.close = adjusted_price;
+        } else {
+            self.open = price;
+            self.high = price;
+            self.low = price;
+            self.close = price;
+            self.volume = i64::from(size);
+            self.count = 1;
+            self.price_type = price_type;
+            self.date = date;
+            self.ms_of_day = ms_of_day;
+            self.initialized = true;
         }
     }
 }
 
-/// Convert a price from one price_type to another (mirrors Java PriceCalcUtils.changePriceType).
+/// Convert a price from one `price_type` to another (mirrors Java PriceCalcUtils.changePriceType).
+// Reason: protocol-defined integer widths from Java FPSS specification.
+#[allow(clippy::cast_possible_truncation)]
 fn change_price_type(price: i32, price_type: i32, new_price_type: i32) -> i32 {
-    if price == 0 || price_type == new_price_type {
-        return price;
-    }
     const POW10: [i32; 10] = [
         1,
         10,
@@ -1430,16 +1469,19 @@ fn change_price_type(price: i32, price_type: i32, new_price_type: i32) -> i32 {
         100_000_000,
         1_000_000_000,
     ];
+    if price == 0 || price_type == new_price_type {
+        return price;
+    }
     let exp = new_price_type - price_type;
     if exp <= 0 {
-        let idx = (-exp) as usize;
+        let idx = usize::try_from(-exp).unwrap_or(0);
         if idx < POW10.len() {
             price * POW10[idx]
         } else {
             price
         }
     } else {
-        let idx = exp as usize;
+        let idx = usize::try_from(exp).unwrap_or(0);
         if idx < POW10.len() {
             price / POW10[idx]
         } else {
@@ -1468,7 +1510,15 @@ struct DeltaState {
     /// `(msg_type, contract_id)`. The dev server sends 8-field trades (simple
     /// format) while production sends 16-field trades (extended format).
     field_counts: HashMap<(u8, i32), usize>,
+    /// Timestamp of last STOP (market close) signal. Used to suppress
+    /// "unknown `contract_id`" warnings for 5 seconds after STOP, matching
+    /// Java terminal behavior where stale ticks are expected during teardown.
+    last_stop: Option<Instant>,
 }
+
+/// Duration after a STOP signal during which "unknown `contract_id`" warnings
+/// are suppressed. The Java terminal silences these for 5 seconds.
+const STOP_SUPPRESS_DURATION: Duration = Duration::from_secs(5);
 
 impl DeltaState {
     fn new() -> Self {
@@ -1479,6 +1529,7 @@ impl DeltaState {
             alloc_buf: vec![0i32; TRADE_FIELDS + 1],
             last_was_date: false,
             field_counts: HashMap::new(),
+            last_stop: None,
         }
     }
 
@@ -1487,6 +1538,10 @@ impl DeltaState {
     /// Called on START/STOP (market open/close) signals to reset delta
     /// decompression, matching Java's behavior where `Tick.readID()` starts
     /// fresh after a session boundary.
+    ///
+    /// Note: `last_stop` is intentionally NOT cleared here because STOP
+    /// itself calls `clear()`, and the timestamp must survive to suppress
+    /// stale-tick warnings for 5 seconds after the STOP signal.
     fn clear(&mut self) {
         self.prev.clear();
         self.ohlcvc.clear();
@@ -1494,10 +1549,16 @@ impl DeltaState {
         self.field_counts.clear();
     }
 
+    /// Whether we are within the post-STOP suppression window.
+    fn is_in_stop_suppression_window(&self) -> bool {
+        self.last_stop
+            .is_some_and(|t| t.elapsed() < STOP_SUPPRESS_DURATION)
+    }
+
     /// Decode FIT payload and apply delta decompression.
     ///
     /// The ENTIRE payload is FIT-encoded. The first FIT field (alloc[0]) is the
-    /// contract_id. Tick data fields start at alloc[1..].
+    /// `contract_id`. Tick data fields start at alloc[1..].
     ///
     /// This matches the Java terminal's `FPSSClient` which calls:
     /// ```java
@@ -1583,8 +1644,15 @@ impl DeltaState {
 /// per-frame `Vec<FpssEvent>` allocation that was on the hot path.
 ///
 /// This is the frame dispatch logic from `FPSSClient.java`'s reader thread.
-/// Tick data frames (Quote, Trade, OpenInterest, Ohlcvc) are FIT-decoded and
+/// Tick data frames (Quote, Trade, `OpenInterest`, Ohlcvc) are FIT-decoded and
 /// delta-decompressed before being emitted as typed events.
+// Reason: FPSS protocol uses Java-defined integer widths; frame decode is inherently large.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::too_many_lines,
+    clippy::needless_pass_by_value
+)]
 fn decode_frame(
     code: StreamMsgType,
     payload: &[u8],
@@ -1599,6 +1667,19 @@ fn decode_frame(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos() as u64;
+
+    // Log a warning when ticks arrive for contract IDs not in the map,
+    // but suppress for 5 seconds after STOP (market close) since stale
+    // ticks are expected during teardown. Matches Java terminal behavior.
+    let warn_unknown_contract = |contract_id: i32, kind: &str, delta_state: &DeltaState| {
+        let known = contract_map
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains_key(&contract_id);
+        if !known && !delta_state.is_in_stop_suppression_window() {
+            tracing::warn!(contract_id, kind, "no contract for ID");
+        }
+    };
 
     match code {
         StreamMsgType::Metadata => {
@@ -1619,7 +1700,7 @@ fn decode_frame(
                 tracing::debug!(id, contract = %contract, "contract assigned");
                 contract_map
                     .lock()
-                    .unwrap_or_else(|e| e.into_inner())
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .insert(id, contract.clone());
                 (
                     Some(FpssEvent::Control(FpssControl::ContractAssigned {
@@ -1644,6 +1725,7 @@ fn decode_frame(
             let msg_code = code as u8;
             match delta_state.decode_tick(msg_code, payload, QUOTE_FIELDS) {
                 Some((contract_id, f, _n)) => {
+                    warn_unknown_contract(contract_id, "quote", delta_state);
                     metrics::counter!("thetadatadx.fpss.events", "kind" => "quote").increment(1);
                     let pt = f[9];
                     (
@@ -1684,6 +1766,7 @@ fn decode_frame(
             let msg_code = code as u8;
             match delta_state.decode_tick(msg_code, payload, TRADE_FIELDS) {
                 Some((contract_id, f, n_data)) => {
+                    warn_unknown_contract(contract_id, "trade", delta_state);
                     metrics::counter!("thetadatadx.fpss.events", "kind" => "trade").increment(1);
 
                     if n_data != 8 && n_data != TRADE_FIELDS {
@@ -1803,6 +1886,7 @@ fn decode_frame(
             let msg_code = code as u8;
             match delta_state.decode_tick(msg_code, payload, OI_FIELDS) {
                 Some((contract_id, f, _n)) => {
+                    warn_unknown_contract(contract_id, "open_interest", delta_state);
                     metrics::counter!("thetadatadx.fpss.events", "kind" => "open_interest")
                         .increment(1);
                     (
@@ -1831,6 +1915,7 @@ fn decode_frame(
             let msg_code = code as u8;
             match delta_state.decode_tick(msg_code, payload, OHLCVC_FIELDS) {
                 Some((contract_id, f, _n)) => {
+                    warn_unknown_contract(contract_id, "ohlcvc", delta_state);
                     metrics::counter!("thetadatadx.fpss.events", "kind" => "ohlcvc").increment(1);
                     let acc = delta_state
                         .ohlcvc
@@ -1897,17 +1982,18 @@ fn decode_frame(
             delta_state.clear();
             contract_map
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .clear(); // Java: idToContract.clear()
             (Some(FpssEvent::Control(FpssControl::MarketOpen)), None)
         }
 
         StreamMsgType::Stop => {
             tracing::info!("market close signal received");
+            delta_state.last_stop = Some(Instant::now());
             delta_state.clear();
             contract_map
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .clear(); // Java: idToContract.clear()
             (Some(FpssEvent::Control(FpssControl::MarketClose)), None)
         }
@@ -1975,6 +2061,8 @@ fn decode_frame(
 /// - Every 100ms
 ///
 /// Source: `FPSSClient.java` heartbeat thread, interval = 100ms.
+// Reason: all parameters are moved into this function from a spawned thread closure.
+#[allow(clippy::needless_pass_by_value)]
 fn ping_loop(
     cmd_tx: std_mpsc::Sender<IoCommand>,
     shutdown: Arc<AtomicBool>,
@@ -2033,6 +2121,8 @@ fn ping_loop(
 ///
 /// Source: `FPSSClient.java` reconnection logic in the main loop.
 #[allow(clippy::too_many_arguments)]
+// Reason: missing errors doc for internal function.
+#[allow(clippy::missing_errors_doc)]
 pub fn reconnect<F>(
     creds: &Credentials,
     hosts: &[(String, u16)],
@@ -2042,6 +2132,7 @@ pub fn reconnect<F>(
     ring_size: usize,
     flush_mode: FpssFlushMode,
     policy: ReconnectPolicy,
+    derive_ohlcvc: bool,
     handler: F,
 ) -> Result<FpssClient, Error>
 where
@@ -2050,7 +2141,15 @@ where
     tracing::info!(delay_ms, "waiting before FPSS reconnection");
     thread::sleep(Duration::from_millis(delay_ms));
 
-    let client = FpssClient::connect(creds, hosts, ring_size, flush_mode, policy, handler)?;
+    let client = FpssClient::connect(
+        creds,
+        hosts,
+        ring_size,
+        flush_mode,
+        policy,
+        derive_ohlcvc,
+        handler,
+    )?;
 
     // Re-subscribe all previous per-contract subscriptions with req_id = -1
     // Source: FPSSClient.java -- reconnect logic uses req_id = -1 for re-subscriptions
@@ -2089,14 +2188,17 @@ where
 
     // Store the re-subscribed lists
     {
-        let mut subs = client.active_subs.lock().unwrap_or_else(|e| e.into_inner());
+        let mut subs = client
+            .active_subs
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         *subs = previous_subs;
     }
     {
         let mut subs = client
             .active_full_subs
             .lock()
-            .unwrap_or_else(|e| e.into_inner());
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         *subs = previous_full_subs;
     }
 
@@ -2114,6 +2216,7 @@ where
 /// succeeds. We treat all 7 credential/account error codes as permanent because
 /// no amount of retrying will fix bad credentials. This is a deliberate
 /// improvement over the Java behavior.
+#[must_use]
 pub fn reconnect_delay(reason: RemoveReason) -> Option<u64> {
     match reason {
         // Permanent errors -- no amount of reconnection will fix bad credentials.

@@ -65,6 +65,19 @@ Returns a `Vec<CalendarDay>` with calendar info for non-standard days in the yea
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+[
+  {"date": 20260101, "is_open": 0, "open_time": 0, "close_time": 0},
+  {"date": 20260119, "is_open": 0, "open_time": 0, "close_time": 0},
+  {"date": 20260216, "is_open": 0, "open_time": 0, "close_time": 0}
+]
+```
+
+> Returns market holidays for the year. `is_open=0` with `open_time=0` indicates a full closure. Early closures show non-zero `close_time` (e.g., `46800000` = 1:00 PM).
+
 ## Notes
 
 - The server returns only non-standard days (holidays and early closes), not every calendar day.

@@ -1,8 +1,8 @@
-//! Server configuration for direct ThetaData access.
+//! Server configuration for direct `ThetaData` access.
 //!
 //! # Server topology (from decompiled Java + `config_0.properties`)
 //!
-//! ThetaData runs two server types in their NJ datacenter:
+//! `ThetaData` runs two server types in their NJ datacenter:
 //!
 //! ## MDDS — Market Data Distribution Server (gRPC, historical data)
 //!
@@ -38,6 +38,29 @@ use std::time::Duration;
 use tdbe::types::enums::RemoveReason;
 
 use crate::error::Error;
+
+/// Clamp a `usize` value to `[min, max]`, logging a warning if it was out of range.
+fn clamp_with_warning(value: usize, min: usize, max: usize, name: &str) -> usize {
+    if value < min {
+        tracing::warn!(
+            field = name,
+            value,
+            min,
+            "config value below minimum, clamped"
+        );
+        min
+    } else if value > max {
+        tracing::warn!(
+            field = name,
+            value,
+            max,
+            "config value above maximum, clamped"
+        );
+        max
+    } else {
+        value
+    }
+}
 
 /// Controls FPSS reconnection behavior after a disconnect.
 ///
@@ -91,7 +114,7 @@ pub enum FpssFlushMode {
     Immediate,
 }
 
-/// Configuration for connecting to ThetaData servers directly.
+/// Configuration for connecting to `ThetaData` servers directly.
 ///
 /// Use [`DirectConfig::production()`] for the standard NJ production servers.
 #[derive(Debug, Clone)]
@@ -210,7 +233,7 @@ pub struct DirectConfig {
     /// NOTE: Not automatically wired — caller should pass to `fpss::reconnect()`.
     pub reconnect_wait_ms: u64,
 
-    /// Delay before reconnecting after a TooManyRequests disconnect, in milliseconds.
+    /// Delay before reconnecting after a `TooManyRequests` disconnect, in milliseconds.
     ///
     /// Source: `FPSSClient.handleInvoluntaryDisconnect()` — 130 second wait.
     ///
@@ -223,6 +246,16 @@ pub struct DirectConfig {
     /// Default: [`ReconnectPolicy::Auto`] — matches Java terminal behavior.
     pub reconnect_policy: ReconnectPolicy,
 
+    // -- OHLCVC derivation --
+    /// Whether to derive OHLCVC bars locally from trade events.
+    ///
+    /// When `true` (default), the FPSS client emits derived `FpssData::Ohlcvc`
+    /// events after each trade. When `false`, only server-sent OHLCVC frames
+    /// (wire code 24) are emitted, reducing per-trade throughput overhead.
+    ///
+    /// The Java terminal always derives OHLCVC with no way to disable it.
+    pub derive_ohlcvc: bool,
+
     // -- Threading --
     /// Number of tokio worker threads. `None` = tokio default (number of CPU cores).
     ///
@@ -234,12 +267,13 @@ pub struct DirectConfig {
 }
 
 impl DirectConfig {
-    /// Production configuration for ThetaData's NJ datacenter.
+    /// Production configuration for `ThetaData`'s NJ datacenter.
     ///
     /// All values extracted from the decompiled Java terminal:
     /// - MDDS: `mdds-01.thetadata.us:443` (gRPC over TLS)
     /// - FPSS: 4 hosts from `config_0.properties` `FPSS_NJ_HOSTS`
     /// - Timeouts: from `config_0.properties`
+    #[must_use]
     pub fn production() -> Self {
         Self {
             // Source: MddsConnectionManager (v3 gRPC path)
@@ -282,14 +316,18 @@ impl DirectConfig {
             // Auto-reconnect matches Java terminal behavior by default
             reconnect_policy: ReconnectPolicy::Auto,
 
+            // Derive OHLCVC from trades by default (matches Java terminal)
+            derive_ohlcvc: true,
+
             // Default: use all CPU cores
             tokio_worker_threads: None,
         }
+        .validate()
     }
 
     /// Dev FPSS configuration.
     ///
-    /// Connects to ThetaData's dev FPSS servers (port 20200) which replay
+    /// Connects to `ThetaData`'s dev FPSS servers (port 20200) which replay
     /// a random historical trading day in an infinite loop at maximum speed.
     /// Designed for development and testing when markets are closed.
     ///
@@ -301,6 +339,7 @@ impl DirectConfig {
     /// Note: dev server replays data at max speed, so queue and ring sizes
     /// match production to avoid drops. Some contracts may not exist on
     /// the replayed day.
+    #[must_use]
     pub fn dev() -> Self {
         let mut config = Self::production();
         // Source: config.toml fpss_dev_hosts
@@ -309,17 +348,18 @@ impl DirectConfig {
             ("test-server.thetadata.us".to_string(), 20200),
             ("test-server.thetadata.us".to_string(), 20201),
         ];
-        config
+        config.validate()
     }
 
     /// Stage FPSS configuration.
     ///
-    /// Connects to ThetaData's staging FPSS servers (port 20100).
+    /// Connects to `ThetaData`'s staging FPSS servers (port 20100).
     /// Frequent reboots, testing data. Not stable.
     ///
     /// MDDS (historical) still uses production servers.
     ///
     /// Source: `config.toml` `fpss_stage_hosts`
+    #[must_use]
     pub fn stage() -> Self {
         let mut config = Self::production();
         // Source: config.toml fpss_stage_hosts
@@ -328,20 +368,55 @@ impl DirectConfig {
             ("test-server.thetadata.us".to_string(), 20100),
             ("test-server.thetadata.us".to_string(), 20101),
         ];
-        config
+        config.validate()
+    }
+
+    /// Validate configuration values and clamp out-of-range fields, logging
+    /// a warning for each clamped value.
+    ///
+    /// Called automatically by [`production()`](Self::production),
+    /// [`dev()`](Self::dev), and [`stage()`](Self::stage). Also useful after
+    /// loading from a TOML file or modifying fields programmatically.
+    #[must_use]
+    pub fn validate(mut self) -> Self {
+        self.fpss_queue_depth =
+            clamp_with_warning(self.fpss_queue_depth, 16, 1_000_000, "fpss_queue_depth");
+        self.mdds_window_size_kb =
+            clamp_with_warning(self.mdds_window_size_kb, 64, 1_024, "mdds_window_size_kb");
+        self.mdds_connection_window_size_kb = clamp_with_warning(
+            self.mdds_connection_window_size_kb,
+            64,
+            1_024,
+            "mdds_connection_window_size_kb",
+        );
+        self
     }
 
     /// Build the MDDS gRPC endpoint URI.
     ///
     /// Returns a URI suitable for `tonic::transport::Channel::from_static()`.
+    #[must_use]
     pub fn mdds_uri(&self) -> String {
         let scheme = if self.mdds_tls { "https" } else { "http" };
         format!("{}://{}:{}", scheme, self.mdds_host, self.mdds_port)
     }
 
+    /// Set whether to derive OHLCVC bars locally from trade events.
+    ///
+    /// When `false`, only server-sent OHLCVC frames are emitted,
+    /// reducing per-trade throughput overhead.
+    #[must_use]
+    pub fn derive_ohlcvc(mut self, enabled: bool) -> Self {
+        self.derive_ohlcvc = enabled;
+        self
+    }
+
     /// Parse FPSS hosts from a comma-separated `host:port,host:port,...` string.
     ///
     /// This is the format used in `config_0.properties` for `FPSS_NJ_HOSTS`.
+    /// # Errors
+    ///
+    /// Returns an error on network, authentication, or parsing failure.
     pub fn parse_fpss_hosts(hosts_str: &str) -> Result<Vec<(String, u16)>, Error> {
         let mut result = Vec::new();
 
@@ -497,8 +572,8 @@ mod config_file {
     #[derive(Debug, Default, Deserialize)]
     #[serde(default)]
     struct AuthSection {
-        #[allow(dead_code)]
-        creds_file: Option<String>,
+        #[serde(rename = "creds_file")]
+        _creds_file: Option<String>,
     }
 
     impl FpssHosts {
@@ -546,7 +621,7 @@ mod config_file {
         /// [fpss]
         /// hosts = ["nj-a.thetadata.us:20000", "nj-b.thetadata.us:20000"]
         /// reconnect_wait = 2000
-        /// queue_depth = 1000000
+        /// queue_depth = 1_000_000
         /// flush_mode = "batched"  # or "immediate"
         ///
         /// [grpc]
@@ -554,6 +629,9 @@ mod config_file {
         /// connection_window_size_kb = 64
         /// concurrent_requests = 0  # 0 = auto from tier
         /// ```
+        /// # Errors
+        ///
+        /// Returns an error on network, authentication, or parsing failure.
         pub fn from_file(path: impl AsRef<std::path::Path>) -> Result<Self, Error> {
             let contents = std::fs::read_to_string(path.as_ref()).map_err(|e| {
                 Error::Config(format!(
@@ -567,6 +645,9 @@ mod config_file {
         /// Parse configuration from a TOML string.
         ///
         /// Same semantics as [`from_file`](Self::from_file) but takes a string directly.
+        /// # Errors
+        ///
+        /// Returns an error on network, authentication, or parsing failure.
         pub fn from_toml_str(toml_str: &str) -> Result<Self, Error> {
             let cf: ConfigFile = toml::from_str(toml_str)
                 .map_err(|e| Error::Config(format!("failed to parse TOML config: {e}")))?;
@@ -613,8 +694,13 @@ mod config_file {
                 // Use the builder API to set Manual or Custom programmatically.
                 reconnect_policy: super::ReconnectPolicy::Auto,
 
+                // Default: derive OHLCVC from trades (matches production default).
+                // Use the builder API to disable programmatically.
+                derive_ohlcvc: true,
+
                 tokio_worker_threads: None,
-            })
+            }
+            .validate())
         }
     }
 }
@@ -863,6 +949,58 @@ mod tests {
             assert!(result.is_err());
             assert!(result.unwrap_err().to_string().contains("TOML"));
         }
+    }
+
+    // -- Validation tests --
+
+    #[test]
+    fn validate_clamps_fpss_queue_depth_below_min() {
+        let mut config = DirectConfig::production();
+        config.fpss_queue_depth = 5;
+        let config = config.validate();
+        assert_eq!(config.fpss_queue_depth, 16);
+    }
+
+    #[test]
+    fn validate_clamps_fpss_queue_depth_above_max() {
+        let mut config = DirectConfig::production();
+        config.fpss_queue_depth = 2_000_000;
+        let config = config.validate();
+        assert_eq!(config.fpss_queue_depth, 1_000_000);
+    }
+
+    #[test]
+    fn validate_clamps_window_size_below_min() {
+        let mut config = DirectConfig::production();
+        config.mdds_window_size_kb = 10;
+        let config = config.validate();
+        assert_eq!(config.mdds_window_size_kb, 64);
+    }
+
+    #[test]
+    fn validate_clamps_window_size_above_max() {
+        let mut config = DirectConfig::production();
+        config.mdds_window_size_kb = 2_048;
+        let config = config.validate();
+        assert_eq!(config.mdds_window_size_kb, 1_024);
+    }
+
+    #[test]
+    fn validate_clamps_connection_window_size() {
+        let mut config = DirectConfig::production();
+        config.mdds_connection_window_size_kb = 2_048;
+        let config = config.validate();
+        assert_eq!(config.mdds_connection_window_size_kb, 1_024);
+    }
+
+    #[test]
+    fn validate_preserves_in_range_values() {
+        let config = DirectConfig::production();
+        let validated = config.validate();
+        // Production defaults are all within range.
+        assert_eq!(validated.fpss_queue_depth, 1_000_000);
+        assert_eq!(validated.mdds_window_size_kb, 64);
+        assert_eq!(validated.mdds_connection_window_size_kb, 64);
     }
 
     // -- Metrics tests --

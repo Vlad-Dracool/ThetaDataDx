@@ -50,6 +50,15 @@ auto strikes = client.option_list_strikes("SPY", "20241220");
 </div>
 </div>
 
+
+### Sample Response
+
+```json
+["597", "661", "725", "320", "640", "450", "500", "550", "555", "560"]
+```
+
+> SPY strikes for the 2026-04-17 expiration. Full response contains 269 strikes.
+
 ## Notes
 
 - Strike prices are returned as scaled integers in tenths of a cent. Divide by 1000 to get the dollar value: `"500"` = $500.00.
