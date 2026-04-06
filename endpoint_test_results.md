@@ -1,8 +1,9 @@
-# ThetaDataDx v6.0.1 -- Live Endpoint Test Results
+# ThetaDataDx -- Live Endpoint Test Results
 
-Date: 2026-04-06 15:01 UTC
+Date: 2026-04-06 15:14 UTC
+Version: tdx 6.0.0
 
-## stock list_symbols
+## 1. stock list_symbols
 ```
 $ tdx stock list_symbols
 ┌──────────────┐
@@ -17,11 +18,13 @@ $ tdx stock list_symbols
 │ AAAA         │
 │ AAAC         │
 │ AAAP         │
+│ AAAU         │
+│ AABA         │
+│ AAC          │
 ```
+**PASS** (13 rows)
 
-**Result: PASS (10 rows)**
-
-## stock list_dates
+## 2. stock list_dates
 ```
 $ tdx stock list_dates TRADE AAPL
 ┌────────────┐
@@ -36,63 +39,61 @@ $ tdx stock list_dates TRADE AAPL
 │ 2012-06-11 │
 │ 2012-06-12 │
 │ 2012-06-13 │
+│ 2012-06-14 │
+│ 2012-06-15 │
+│ 2012-06-18 │
 ```
+**PASS** (13 rows)
 
-**Result: PASS (10 rows)**
-
-## stock snapshot_ohlc
+## 3. stock snapshot_ohlc
 ```
 $ tdx stock snapshot_ohlc AAPL
-┌────────────┬──────────────┬──────────┬────────┬────────┬────────┬─────────┬────────┐
-│ date       ┆ time         ┆ open     ┆ high   ┆ low    ┆ close  ┆ volume  ┆ count  │
-╞════════════╪══════════════╪══════════╪════════╪════════╪════════╪═════════╪════════╡
-│ 2026-04-06 ┆ 11:01:21.045 ┆ 256.9625 ┆ 262.16 ┆ 256.48 ┆ 259.98 ┆ 6965065 ┆ 221116 │
-└────────────┴──────────────┴──────────┴────────┴────────┴────────┴─────────┴────────┘
+┌────────────┬──────────────┬──────────┬────────┬────────┬─────────┬─────────┬────────┐
+│ date       ┆ time         ┆ open     ┆ high   ┆ low    ┆ close   ┆ volume  ┆ count  │
+╞════════════╪══════════════╪══════════╪════════╪════════╪═════════╪═════════╪════════╡
+│ 2026-04-06 ┆ 11:14:13.349 ┆ 256.9625 ┆ 262.16 ┆ 256.48 ┆ 259.425 ┆ 7463406 ┆ 243053 │
+└────────────┴──────────────┴──────────┴────────┴────────┴─────────┴─────────┴────────┘
 1 rows
 ```
+**PASS** (2 rows)
 
-**Result: PASS (2 rows)**
-
-## stock snapshot_trade
+## 4. stock snapshot_trade
 ```
 $ tdx stock snapshot_trade AAPL
 ┌────────────┬──────────────┬──────────┬──────┬──────────┬───────────┬──────────┐
 │ date       ┆ time         ┆ price    ┆ size ┆ exchange ┆ condition ┆ sequence │
 ╞════════════╪══════════════╪══════════╪══════╪══════════╪═══════════╪══════════╡
-│ 2026-04-06 ┆ 11:01:21.793 ┆ 260.0158 ┆ 1    ┆ 0        ┆ 115       ┆ 21176110 │
+│ 2026-04-06 ┆ 11:14:13.847 ┆ 259.4643 ┆ 1    ┆ 0        ┆ 115       ┆ 23189868 │
 └────────────┴──────────────┴──────────┴──────┴──────────┴───────────┴──────────┘
 1 rows
 ```
+**PASS** (2 rows)
 
-**Result: PASS (2 rows)**
-
-## stock snapshot_quote
+## 5. stock snapshot_quote
 ```
 $ tdx stock snapshot_quote AAPL
 ┌────────────┬──────────────┬──────────┬──────────────┬────────┬───────────────┬──────────┬──────────────┬────────┬───────────────┐
 │ date       ┆ ms_of_day    ┆ bid_size ┆ bid_exchange ┆ bid    ┆ bid_condition ┆ ask_size ┆ ask_exchange ┆ ask    ┆ ask_condition │
 ╞════════════╪══════════════╪══════════╪══════════════╪════════╪═══════════════╪══════════╪══════════════╪════════╪═══════════════╡
-│ 2026-04-06 ┆ 11:01:22.395 ┆ 154      ┆ 29           ┆ 260.03 ┆ 0             ┆ 201      ┆ 29           ┆ 260.05 ┆ 0             │
+│ 2026-04-06 ┆ 11:14:14.626 ┆ 185      ┆ 29           ┆ 259.42 ┆ 0             ┆ 24       ┆ 29           ┆ 259.45 ┆ 0             │
 └────────────┴──────────────┴──────────┴──────────────┴────────┴───────────────┴──────────┴──────────────┴────────┴───────────────┘
 1 rows
 ```
+**PASS** (2 rows)
 
-**Result: PASS (2 rows)**
-
-## stock snapshot_market_value
+## 6. stock snapshot_market_value
 ```
 $ tdx stock snapshot_market_value AAPL
 ┌────────────┬──────────────┬────────────┬────────────────────┬──────────────────┬────────────┬────────────┐
 │ date       ┆ ms_of_day    ┆ market_cap ┆ shares_outstanding ┆ enterprise_value ┆ book_value ┆ free_float │
 ╞════════════╪══════════════╪════════════╪════════════════════╪══════════════════╪════════════╪════════════╡
-│ 2026-04-06 ┆ 11:01:22.983 ┆ 0          ┆ 0                  ┆ 0                ┆ 0          ┆ 0          │
+│ 2026-04-06 ┆ 11:14:15.062 ┆ 0          ┆ 0                  ┆ 0                ┆ 0          ┆ 0          │
 └────────────┴──────────────┴────────────┴────────────────────┴──────────────────┴────────────┴────────────┘
 1 rows
 ```
+**PASS** (2 rows)
 
-**Result: PASS (2 rows)**
-
-## stock history_eod
+## 7. stock history_eod
 ```
 $ tdx stock history_eod AAPL 20260401 20260404
 ┌────────────┬──────────────┬──────────────┬────────┬────────┬────────┬────────┬──────────┬────────┬──────────┬──────────────┬────────┬───────────────┬──────────┬──────────────┬────────┬───────────────┐
@@ -103,10 +104,9 @@ $ tdx stock history_eod AAPL 20260401 20260404
 └────────────┴──────────────┴──────────────┴────────┴────────┴────────┴────────┴──────────┴────────┴──────────┴──────────────┴────────┴───────────────┴──────────┴──────────────┴────────┴───────────────┘
 2 rows
 ```
+**PASS** (3 rows)
 
-**Result: PASS (3 rows)**
-
-## stock history_ohlc
+## 8. stock history_ohlc
 ```
 $ tdx stock history_ohlc AAPL 20260402 60000
 ┌────────────┬──────────────┬──────────┬────────────┬────────────┬────────────┬────────┬───────┐
@@ -121,57 +121,13 @@ $ tdx stock history_ohlc AAPL 20260402 60000
 │ 2026-04-02 ┆ 09:36:00.000 ┆ 251.79   ┆ 251.81     ┆ 251.38     ┆ 251.45     ┆ 113101 ┆ 2554  │
 │ 2026-04-02 ┆ 09:37:00.000 ┆ 251.46   ┆ 251.50     ┆ 251.11     ┆ 251.4422   ┆ 126800 ┆ 2455  │
 │ 2026-04-02 ┆ 09:38:00.000 ┆ 251.36   ┆ 251.44     ┆ 250.90     ┆ 251.01     ┆ 121958 ┆ 2363  │
+│ 2026-04-02 ┆ 09:39:00.000 ┆ 251.01   ┆ 251.10     ┆ 250.79     ┆ 250.86     ┆ 109287 ┆ 2159  │
+│ 2026-04-02 ┆ 09:40:00.000 ┆ 250.88   ┆ 251.085    ┆ 250.67     ┆ 250.82     ┆ 167595 ┆ 2707  │
+│ 2026-04-02 ┆ 09:41:00.000 ┆ 250.81   ┆ 251.5795   ┆ 250.79     ┆ 251.5795   ┆ 171724 ┆ 2986  │
 ```
+**PASS** (13 rows)
 
-**Result: PASS (10 rows)**
-
-## stock history_trade
-```
-$ tdx stock history_trade AAPL 20260402
-┌────────────┬──────────────┬────────────┬────────┬──────────┬───────────┬──────────┐
-│ date       ┆ time         ┆ price      ┆ size   ┆ exchange ┆ condition ┆ sequence │
-╞════════════╪══════════════╪════════════╪════════╪══════════╪═══════════╪══════════╡
-│ 2026-04-02 ┆ 09:30:00.031 ┆ 254.20     ┆ 4      ┆ 60       ┆ 115       ┆ 3250619  │
-│ 2026-04-02 ┆ 09:30:00.050 ┆ 254.13     ┆ 1      ┆ 57       ┆ 115       ┆ 3251511  │
-│ 2026-04-02 ┆ 09:30:00.059 ┆ 254.20     ┆ 1      ┆ 60       ┆ 115       ┆ 3251900  │
-│ 2026-04-02 ┆ 09:30:00.060 ┆ 254.19     ┆ 7      ┆ 63       ┆ 115       ┆ 3251911  │
-│ 2026-04-02 ┆ 09:30:00.064 ┆ 254.13     ┆ 1      ┆ 57       ┆ 115       ┆ 3252072  │
-│ 2026-04-02 ┆ 09:30:00.064 ┆ 254.13     ┆ 3      ┆ 57       ┆ 115       ┆ 3252092  │
-│ 2026-04-02 ┆ 09:30:00.064 ┆ 254.13     ┆ 3      ┆ 57       ┆ 115       ┆ 3252106  │
-│ 2026-04-02 ┆ 09:30:00.068 ┆ 254.20     ┆ 1      ┆ 60       ┆ 115       ┆ 3252212  │
-│ 2026-04-02 ┆ 09:30:00.107 ┆ 254.20     ┆ 5      ┆ 7        ┆ 115       ┆ 3254224  │
-```
-
-**Result: PASS (10 rows)**
-
-## stock history_quote
-```
-$ tdx stock history_quote AAPL 20260402 60000
-┌────────────┬──────────────┬──────────┬──────────────┬────────┬───────────────┬──────────┬──────────────┬────────┬───────────────┐
-│ date       ┆ ms_of_day    ┆ bid_size ┆ bid_exchange ┆ bid    ┆ bid_condition ┆ ask_size ┆ ask_exchange ┆ ask    ┆ ask_condition │
-╞════════════╪══════════════╪══════════╪══════════════╪════════╪═══════════════╪══════════╪══════════════╪════════╪═══════════════╡
-│ 2026-04-02 ┆ 09:30:00.000 ┆ 500      ┆ 1            ┆ 254.06 ┆ 0             ┆ 200      ┆ 7            ┆ 254.20 ┆ 0             │
-│ 2026-04-02 ┆ 09:31:00.000 ┆ 100      ┆ 1            ┆ 253.14 ┆ 0             ┆ 600      ┆ 1            ┆ 253.25 ┆ 0             │
-│ 2026-04-02 ┆ 09:32:00.000 ┆ 100      ┆ 1            ┆ 252.89 ┆ 0             ┆ 500      ┆ 1            ┆ 252.97 ┆ 0             │
-│ 2026-04-02 ┆ 09:33:00.000 ┆ 300      ┆ 7            ┆ 252.38 ┆ 0             ┆ 100      ┆ 65           ┆ 252.44 ┆ 0             │
-│ 2026-04-02 ┆ 09:34:00.000 ┆ 100      ┆ 1            ┆ 252.56 ┆ 0             ┆ 100      ┆ 1            ┆ 252.60 ┆ 0             │
-│ 2026-04-02 ┆ 09:35:00.000 ┆ 100      ┆ 1            ┆ 252.13 ┆ 0             ┆ 100      ┆ 1            ┆ 252.18 ┆ 0             │
-│ 2026-04-02 ┆ 09:36:00.000 ┆ 100      ┆ 1            ┆ 251.76 ┆ 0             ┆ 100      ┆ 1            ┆ 251.79 ┆ 0             │
-│ 2026-04-02 ┆ 09:37:00.000 ┆ 100      ┆ 7            ┆ 251.43 ┆ 0             ┆ 100      ┆ 7            ┆ 251.46 ┆ 0             │
-│ 2026-04-02 ┆ 09:38:00.000 ┆ 400      ┆ 7            ┆ 251.39 ┆ 0             ┆ 300      ┆ 7            ┆ 251.45 ┆ 0             │
-```
-
-**Result: PASS (10 rows)**
-
-## stock history_trade_quote
-```
-$ tdx stock history_trade_quote AAPL 20260402
-0 rows
-```
-
-**Result: PASS (0 rows)**
-
-## stock history_ohlc_range
+## 9. stock history_ohlc_range
 ```
 $ tdx stock history_ohlc_range AAPL 20260401 20260402 60000
 ┌────────────┬──────────────┬──────────┬────────────┬────────────┬────────────┬─────────┬───────┐
@@ -186,11 +142,62 @@ $ tdx stock history_ohlc_range AAPL 20260401 20260402 60000
 │ 2026-04-01 ┆ 09:36:00.000 ┆ 254.84   ┆ 255.07     ┆ 254.79     ┆ 255.01     ┆ 123386  ┆ 2328  │
 │ 2026-04-01 ┆ 09:37:00.000 ┆ 254.99   ┆ 255.32     ┆ 254.69     ┆ 255.11     ┆ 135857  ┆ 2803  │
 │ 2026-04-01 ┆ 09:38:00.000 ┆ 255.14   ┆ 255.26     ┆ 254.92     ┆ 254.96     ┆ 92023   ┆ 1872  │
+│ 2026-04-01 ┆ 09:39:00.000 ┆ 254.89   ┆ 255.10     ┆ 254.67     ┆ 255.06     ┆ 133367  ┆ 2268  │
+│ 2026-04-01 ┆ 09:40:00.000 ┆ 255.05   ┆ 255.44     ┆ 255.03     ┆ 255.27     ┆ 158100  ┆ 2847  │
+│ 2026-04-01 ┆ 09:41:00.000 ┆ 255.27   ┆ 255.59     ┆ 255.22     ┆ 255.40     ┆ 129005  ┆ 2189  │
 ```
+**PASS** (13 rows)
 
-**Result: PASS (10 rows)**
+## 10. stock history_trade
+```
+$ tdx stock history_trade AAPL 20260402
+┌────────────┬──────────────┬────────────┬────────┬──────────┬───────────┬──────────┐
+│ date       ┆ time         ┆ price      ┆ size   ┆ exchange ┆ condition ┆ sequence │
+╞════════════╪══════════════╪════════════╪════════╪══════════╪═══════════╪══════════╡
+│ 2026-04-02 ┆ 09:30:00.031 ┆ 254.20     ┆ 4      ┆ 60       ┆ 115       ┆ 3250619  │
+│ 2026-04-02 ┆ 09:30:00.050 ┆ 254.13     ┆ 1      ┆ 57       ┆ 115       ┆ 3251511  │
+│ 2026-04-02 ┆ 09:30:00.059 ┆ 254.20     ┆ 1      ┆ 60       ┆ 115       ┆ 3251900  │
+│ 2026-04-02 ┆ 09:30:00.060 ┆ 254.19     ┆ 7      ┆ 63       ┆ 115       ┆ 3251911  │
+│ 2026-04-02 ┆ 09:30:00.064 ┆ 254.13     ┆ 1      ┆ 57       ┆ 115       ┆ 3252072  │
+│ 2026-04-02 ┆ 09:30:00.064 ┆ 254.13     ┆ 3      ┆ 57       ┆ 115       ┆ 3252092  │
+│ 2026-04-02 ┆ 09:30:00.064 ┆ 254.13     ┆ 3      ┆ 57       ┆ 115       ┆ 3252106  │
+│ 2026-04-02 ┆ 09:30:00.068 ┆ 254.20     ┆ 1      ┆ 60       ┆ 115       ┆ 3252212  │
+│ 2026-04-02 ┆ 09:30:00.107 ┆ 254.20     ┆ 5      ┆ 7        ┆ 115       ┆ 3254224  │
+│ 2026-04-02 ┆ 09:30:00.107 ┆ 254.20     ┆ 5      ┆ 7        ┆ 66        ┆ 3254225  │
+│ 2026-04-02 ┆ 09:30:00.107 ┆ 254.13     ┆ 1      ┆ 7        ┆ 115       ┆ 3254229  │
+│ 2026-04-02 ┆ 09:30:00.107 ┆ 254.20     ┆ 225    ┆ 7        ┆ 95        ┆ 3254238  │
+```
+**PASS** (13 rows)
 
-## stock at_time_trade
+## 11. stock history_quote
+```
+$ tdx stock history_quote AAPL 20260402 60000
+┌────────────┬──────────────┬──────────┬──────────────┬────────┬───────────────┬──────────┬──────────────┬────────┬───────────────┐
+│ date       ┆ ms_of_day    ┆ bid_size ┆ bid_exchange ┆ bid    ┆ bid_condition ┆ ask_size ┆ ask_exchange ┆ ask    ┆ ask_condition │
+╞════════════╪══════════════╪══════════╪══════════════╪════════╪═══════════════╪══════════╪══════════════╪════════╪═══════════════╡
+│ 2026-04-02 ┆ 09:30:00.000 ┆ 500      ┆ 1            ┆ 254.06 ┆ 0             ┆ 200      ┆ 7            ┆ 254.20 ┆ 0             │
+│ 2026-04-02 ┆ 09:31:00.000 ┆ 100      ┆ 1            ┆ 253.14 ┆ 0             ┆ 600      ┆ 1            ┆ 253.25 ┆ 0             │
+│ 2026-04-02 ┆ 09:32:00.000 ┆ 100      ┆ 1            ┆ 252.89 ┆ 0             ┆ 500      ┆ 1            ┆ 252.97 ┆ 0             │
+│ 2026-04-02 ┆ 09:33:00.000 ┆ 300      ┆ 7            ┆ 252.38 ┆ 0             ┆ 100      ┆ 65           ┆ 252.44 ┆ 0             │
+│ 2026-04-02 ┆ 09:34:00.000 ┆ 100      ┆ 1            ┆ 252.56 ┆ 0             ┆ 100      ┆ 1            ┆ 252.60 ┆ 0             │
+│ 2026-04-02 ┆ 09:35:00.000 ┆ 100      ┆ 1            ┆ 252.13 ┆ 0             ┆ 100      ┆ 1            ┆ 252.18 ┆ 0             │
+│ 2026-04-02 ┆ 09:36:00.000 ┆ 100      ┆ 1            ┆ 251.76 ┆ 0             ┆ 100      ┆ 1            ┆ 251.79 ┆ 0             │
+│ 2026-04-02 ┆ 09:37:00.000 ┆ 100      ┆ 7            ┆ 251.43 ┆ 0             ┆ 100      ┆ 7            ┆ 251.46 ┆ 0             │
+│ 2026-04-02 ┆ 09:38:00.000 ┆ 400      ┆ 7            ┆ 251.39 ┆ 0             ┆ 300      ┆ 7            ┆ 251.45 ┆ 0             │
+│ 2026-04-02 ┆ 09:39:00.000 ┆ 100      ┆ 1            ┆ 250.99 ┆ 0             ┆ 100      ┆ 1            ┆ 251.01 ┆ 0             │
+│ 2026-04-02 ┆ 09:40:00.000 ┆ 200      ┆ 1            ┆ 250.85 ┆ 0             ┆ 100      ┆ 7            ┆ 250.88 ┆ 0             │
+│ 2026-04-02 ┆ 09:41:00.000 ┆ 100      ┆ 68           ┆ 250.80 ┆ 0             ┆ 100      ┆ 65           ┆ 250.82 ┆ 0             │
+```
+**PASS** (13 rows)
+
+## 12. stock history_trade_quote
+```
+$ tdx stock history_trade_quote AAPL 20260402
+0 rows
+```
+**PASS** (0 rows)
+
+## 13. stock at_time_trade
 ```
 $ tdx stock at_time_trade AAPL 20260401 20260402 34200000
 ┌────────────┬──────────────┬────────┬──────┬──────────┬───────────┬──────────┐
@@ -201,10 +208,9 @@ $ tdx stock at_time_trade AAPL 20260401 20260402 34200000
 └────────────┴──────────────┴────────┴──────┴──────────┴───────────┴──────────┘
 2 rows
 ```
+**PASS** (3 rows)
 
-**Result: PASS (3 rows)**
-
-## stock at_time_quote
+## 14. stock at_time_quote
 ```
 $ tdx stock at_time_quote AAPL 20260401 20260402 34200000
 ┌────────────┬──────────────┬──────────┬──────────────┬────────┬───────────────┬──────────┬──────────────┬────────┬───────────────┐
@@ -215,10 +221,9 @@ $ tdx stock at_time_quote AAPL 20260401 20260402 34200000
 └────────────┴──────────────┴──────────┴──────────────┴────────┴───────────────┴──────────┴──────────────┴────────┴───────────────┘
 2 rows
 ```
+**PASS** (3 rows)
 
-**Result: PASS (3 rows)**
-
-## option list_symbols
+## 15. option list_symbols
 ```
 $ tdx option list_symbols
 ┌────────┐
@@ -233,11 +238,13 @@ $ tdx option list_symbols
 │ 2PRKS  │
 │ 2SAVA  │
 │ 9AC    │
+│ 9AD    │
+│ 9AE    │
+│ 9BC    │
 ```
+**PASS** (13 rows)
 
-**Result: PASS (10 rows)**
-
-## option list_dates
+## 16. option list_dates
 ```
 $ tdx option list_dates TRADE SPY 20260417 550 C
 ┌────────────┐
@@ -252,11 +259,13 @@ $ tdx option list_dates TRADE SPY 20260417 550 C
 │ 2026-01-26 │
 │ 2026-01-27 │
 │ 2026-01-29 │
+│ 2026-01-30 │
+│ 2026-02-02 │
+│ 2026-02-05 │
 ```
+**PASS** (13 rows)
 
-**Result: PASS (10 rows)**
-
-## option list_expirations
+## 17. option list_expirations
 ```
 $ tdx option list_expirations SPY
 ┌────────────┐
@@ -271,11 +280,13 @@ $ tdx option list_expirations SPY
 │ 2012-07-13 │
 │ 2012-07-21 │
 │ 2012-07-27 │
+│ 2012-08-03 │
+│ 2012-08-10 │
+│ 2012-08-18 │
 ```
+**PASS** (13 rows)
 
-**Result: PASS (10 rows)**
-
-## option list_strikes
+## 18. option list_strikes
 ```
 $ tdx option list_strikes SPY 20260417
 ┌────────┐
@@ -290,11 +301,13 @@ $ tdx option list_strikes SPY 20260417
 │ 405    │
 │ 960    │
 │ 575    │
+│ 639    │
+│ 703    │
+│ 895    │
 ```
+**PASS** (13 rows)
 
-**Result: PASS (10 rows)**
-
-## option list_contracts
+## 19. option list_contracts
 ```
 $ tdx option list_contracts TRADE SPY 20260402
 ┌──────┬────────────┬─────────┬───────┐
@@ -309,11 +322,13 @@ $ tdx option list_contracts TRADE SPY 20260402
 │ SPY  ┆ 20260630   ┆ 800.00  ┆ 80    │
 │ SPY  ┆ 20260630   ┆ 669.00  ┆ 80    │
 │ SPY  ┆ 20260630   ┆ 669.00  ┆ 67    │
+│ SPY  ┆ 20260501   ┆ 670.00  ┆ 67    │
+│ SPY  ┆ 20260501   ┆ 670.00  ┆ 80    │
+│ SPY  ┆ 20260630   ┆ 538.00  ┆ 80    │
 ```
+**PASS** (13 rows)
 
-**Result: PASS (10 rows)**
-
-## option snapshot_ohlc
+## 20. option snapshot_ohlc
 ```
 $ tdx option snapshot_ohlc SPY 20260417 550 C
 ┌────────────┬──────────────┬───────┬───────┬───────┬───────┬────────┬───────┐
@@ -323,10 +338,9 @@ $ tdx option snapshot_ohlc SPY 20260417 550 C
 └────────────┴──────────────┴───────┴───────┴───────┴───────┴────────┴───────┘
 1 rows
 ```
+**PASS** (2 rows)
 
-**Result: PASS (2 rows)**
-
-## option snapshot_trade
+## 21. option snapshot_trade
 ```
 $ tdx option snapshot_trade SPY 20260417 550 C
 ┌────────────┬──────────────┬───────┬──────┬──────────┬───────────┬─────────────┐
@@ -336,23 +350,21 @@ $ tdx option snapshot_trade SPY 20260417 550 C
 └────────────┴──────────────┴───────┴──────┴──────────┴───────────┴─────────────┘
 1 rows
 ```
+**PASS** (2 rows)
 
-**Result: PASS (2 rows)**
-
-## option snapshot_quote
+## 22. option snapshot_quote
 ```
 $ tdx option snapshot_quote SPY 20260417 550 C
 ┌────────────┬──────────────┬──────────┬──────────────┬────────┬───────────────┬──────────┬──────────────┬────────┬───────────────┐
 │ date       ┆ ms_of_day    ┆ bid_size ┆ bid_exchange ┆ bid    ┆ bid_condition ┆ ask_size ┆ ask_exchange ┆ ask    ┆ ask_condition │
 ╞════════════╪══════════════╪══════════╪══════════════╪════════╪═══════════════╪══════════╪══════════════╪════════╪═══════════════╡
-│ 2026-04-06 ┆ 11:01:57.784 ┆ 10       ┆ 6            ┆ 107.50 ┆ 50            ┆ 14       ┆ 5            ┆ 110.30 ┆ 50            │
+│ 2026-04-06 ┆ 11:14:47.476 ┆ 14       ┆ 5            ┆ 106.80 ┆ 50            ┆ 10       ┆ 46           ┆ 110.15 ┆ 50            │
 └────────────┴──────────────┴──────────┴──────────────┴────────┴───────────────┴──────────┴──────────────┴────────┴───────────────┘
 1 rows
 ```
+**PASS** (2 rows)
 
-**Result: PASS (2 rows)**
-
-## option snapshot_open_interest
+## 23. option snapshot_open_interest
 ```
 $ tdx option snapshot_open_interest SPY 20260417 550 C
 ┌────────────┬──────────────┬───────────────┐
@@ -362,23 +374,66 @@ $ tdx option snapshot_open_interest SPY 20260417 550 C
 └────────────┴──────────────┴───────────────┘
 1 rows
 ```
+**PASS** (2 rows)
 
-**Result: PASS (2 rows)**
-
-## option snapshot_market_value
+## 24. option snapshot_market_value
 ```
 $ tdx option snapshot_market_value SPY 20260417 550 C
 ┌────────────┬──────────────┬────────────┬────────────────────┬──────────────────┬────────────┬────────────┐
 │ date       ┆ ms_of_day    ┆ market_cap ┆ shares_outstanding ┆ enterprise_value ┆ book_value ┆ free_float │
 ╞════════════╪══════════════╪════════════╪════════════════════╪══════════════════╪════════════╪════════════╡
-│ 2026-04-06 ┆ 11:01:59.706 ┆ 0          ┆ 0                  ┆ 0                ┆ 0          ┆ 0          │
+│ 2026-04-06 ┆ 11:14:47.476 ┆ 0          ┆ 0                  ┆ 0                ┆ 0          ┆ 0          │
 └────────────┴──────────────┴────────────┴────────────────────┴──────────────────┴────────────┴────────────┘
 1 rows
 ```
+**PASS** (2 rows)
 
-**Result: PASS (2 rows)**
+## 25. option snapshot_greeks_iv
+```
+$ tdx option snapshot_greeks_implied_volatility SPY 20260417 550 C
+┌────────────┬──────────────┬────────────────────┬──────────┐
+│ date       ┆ ms_of_day    ┆ implied_volatility ┆ iv_error │
+╞════════════╪══════════════╪════════════════════╪══════════╡
+│ 2026-04-06 ┆ 11:14:47.476 ┆ 0.524600           ┆ 0.000000 │
+└────────────┴──────────────┴────────────────────┴──────────┘
+1 rows
+```
+**PASS** (2 rows)
 
-## option history_eod
+## 26. option snapshot_greeks_all
+```
+$ tdx option snapshot_greeks_all SPY 20260417 550 C
+error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an option endpoint requiring a professional subscription, but you only have a STANDARD subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
+```
+**SKIP** -- requires professional subscription
+
+## 27. option snapshot_greeks_first_order
+```
+$ tdx option snapshot_greeks_first_order SPY 20260417 550 C
+┌────────────┬──────────────┬──────────┬──────────┬──────────┬───────────┬──────────┬───────────┐
+│ date       ┆ ms_of_day    ┆ iv       ┆ delta    ┆ gamma    ┆ theta     ┆ vega     ┆ rho       │
+╞════════════╪══════════════╪══════════╪══════════╪══════════╪═══════════╪══════════╪═══════════╡
+│ 2026-04-06 ┆ 11:14:53.840 ┆ 0.501100 ┆ 0.982400 ┆ 0.000000 ┆ -0.166500 ┆ 4.945700 ┆ 16.197900 │
+└────────────┴──────────────┴──────────┴──────────┴──────────┴───────────┴──────────┴───────────┘
+1 rows
+```
+**PASS** (2 rows)
+
+## 28. option snapshot_greeks_second_order
+```
+$ tdx option snapshot_greeks_second_order SPY 20260417 550 C
+error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an option endpoint requiring a professional subscription, but you only have a STANDARD subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
+```
+**SKIP** -- requires professional subscription
+
+## 29. option snapshot_greeks_third_order
+```
+$ tdx option snapshot_greeks_third_order SPY 20260417 550 C
+error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an option endpoint requiring a professional subscription, but you only have a STANDARD subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
+```
+**SKIP** -- requires professional subscription
+
+## 30. option history_eod
 ```
 $ tdx option history_eod SPY 20260417 550 C 20260401 20260402
 ┌────────────┬──────────────┬──────────────┬────────┬────────┬────────┬────────┬────────┬───────┬──────────┬──────────────┬────────┬───────────────┬──────────┬──────────────┬────────┬───────────────┐
@@ -389,10 +444,9 @@ $ tdx option history_eod SPY 20260417 550 C 20260401 20260402
 └────────────┴──────────────┴──────────────┴────────┴────────┴────────┴────────┴────────┴───────┴──────────┴──────────────┴────────┴───────────────┴──────────┴──────────────┴────────┴───────────────┘
 2 rows
 ```
+**PASS** (3 rows)
 
-**Result: PASS (3 rows)**
-
-## option history_ohlc
+## 31. option history_ohlc
 ```
 $ tdx option history_ohlc SPY 20260417 550 C 20260402 60000
 ┌────────────┬──────────────┬───────┬───────┬───────┬───────┬────────┬───────┐
@@ -407,11 +461,13 @@ $ tdx option history_ohlc SPY 20260417 550 C 20260402 60000
 │ 2026-04-02 ┆ 09:36:00.000 ┆ 0.00  ┆ 0.00  ┆ 0.00  ┆ 0.00  ┆ 0      ┆ 0     │
 │ 2026-04-02 ┆ 09:37:00.000 ┆ 0.00  ┆ 0.00  ┆ 0.00  ┆ 0.00  ┆ 0      ┆ 0     │
 │ 2026-04-02 ┆ 09:38:00.000 ┆ 0.00  ┆ 0.00  ┆ 0.00  ┆ 0.00  ┆ 0      ┆ 0     │
+│ 2026-04-02 ┆ 09:39:00.000 ┆ 0.00  ┆ 0.00  ┆ 0.00  ┆ 0.00  ┆ 0      ┆ 0     │
+│ 2026-04-02 ┆ 09:40:00.000 ┆ 0.00  ┆ 0.00  ┆ 0.00  ┆ 0.00  ┆ 0      ┆ 0     │
+│ 2026-04-02 ┆ 09:41:00.000 ┆ 0.00  ┆ 0.00  ┆ 0.00  ┆ 0.00  ┆ 0      ┆ 0     │
 ```
+**PASS** (13 rows)
 
-**Result: PASS (10 rows)**
-
-## option history_trade
+## 32. option history_trade
 ```
 $ tdx option history_trade SPY 20260417 550 C 20260402
 ┌────────────┬──────────────┬───────┬──────┬──────────┬───────────┬─────────────┐
@@ -421,10 +477,9 @@ $ tdx option history_trade SPY 20260417 550 C 20260402
 └────────────┴──────────────┴───────┴──────┴──────────┴───────────┴─────────────┘
 1 rows
 ```
+**PASS** (2 rows)
 
-**Result: PASS (2 rows)**
-
-## option history_quote
+## 33. option history_quote
 ```
 $ tdx option history_quote SPY 20260417 550 C 20260402 60000
 ┌────────────┬──────────────┬──────────┬──────────────┬────────┬───────────────┬──────────┬──────────────┬────────┬───────────────┐
@@ -439,19 +494,20 @@ $ tdx option history_quote SPY 20260417 550 C 20260402 60000
 │ 2026-04-02 ┆ 09:36:00.000 ┆ 30       ┆ 5            ┆ 96.55  ┆ 50            ┆ 11       ┆ 4            ┆ 99.60  ┆ 50            │
 │ 2026-04-02 ┆ 09:37:00.000 ┆ 30       ┆ 5            ┆ 96.55  ┆ 50            ┆ 1        ┆ 42           ┆ 99.55  ┆ 50            │
 │ 2026-04-02 ┆ 09:38:00.000 ┆ 2        ┆ 76           ┆ 96.40  ┆ 50            ┆ 3        ┆ 76           ┆ 99.68  ┆ 50            │
+│ 2026-04-02 ┆ 09:39:00.000 ┆ 50       ┆ 6            ┆ 96.39  ┆ 50            ┆ 11       ┆ 4            ┆ 99.30  ┆ 50            │
+│ 2026-04-02 ┆ 09:40:00.000 ┆ 2        ┆ 76           ┆ 95.79  ┆ 50            ┆ 11       ┆ 4            ┆ 98.77  ┆ 50            │
+│ 2026-04-02 ┆ 09:41:00.000 ┆ 4        ┆ 5            ┆ 95.33  ┆ 50            ┆ 1        ┆ 5            ┆ 98.58  ┆ 50            │
 ```
+**PASS** (13 rows)
 
-**Result: PASS (10 rows)**
-
-## option history_trade_quote
+## 34. option history_trade_quote
 ```
 $ tdx option history_trade_quote SPY 20260417 550 C 20260402
 0 rows
 ```
+**PASS** (0 rows)
 
-**Result: PASS (0 rows)**
-
-## option history_open_interest
+## 35. option history_open_interest
 ```
 $ tdx option history_open_interest SPY 20260417 550 C 20260402
 ┌────────────┬──────────────┬───────────────┐
@@ -461,18 +517,127 @@ $ tdx option history_open_interest SPY 20260417 550 C 20260402
 └────────────┴──────────────┴───────────────┘
 1 rows
 ```
+**PASS** (2 rows)
 
-**Result: PASS (2 rows)**
+## 36. option history_greeks_eod
+```
+$ tdx option history_greeks_eod SPY 20260417 550 C 20260401 20260402
+┌────────────┬──────────────┬──────────┬──────────┬──────────┬───────────┬───────────┬───────────┐
+│ date       ┆ ms_of_day    ┆ iv       ┆ delta    ┆ gamma    ┆ theta     ┆ vega      ┆ rho       │
+╞════════════╪══════════════╪══════════╪══════════╪══════════╪═══════════╪═══════════╪═══════════╡
+│ 2026-04-01 ┆ 13:06:06.332 ┆ 0.475800 ┆ 0.965800 ┆ 0.001100 ┆ -0.206900 ┆ 10.383100 ┆ 23.050800 │
+│ 2026-04-02 ┆ 09:30:03.497 ┆ 0.439400 ┆ 0.979100 ┆ 0.000800 ┆ -0.151200 ┆ 6.663600  ┆ 21.988200 │
+└────────────┴──────────────┴──────────┴──────────┴──────────┴───────────┴───────────┴───────────┘
+2 rows
+```
+**PASS** (3 rows)
 
-## option at_time_trade
+## 37. option history_greeks_all
+```
+$ tdx option history_greeks_all SPY 20260417 550 C 20260402 60000
+error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an option endpoint requiring a professional subscription, but you only have a STANDARD subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
+```
+**SKIP** -- requires professional subscription
+
+## 38. option history_greeks_first_order
+```
+$ tdx option history_greeks_first_order SPY 20260417 550 C 20260402 60000
+┌────────────┬──────────────┬──────────┬──────────┬──────────┬───────────┬───────────┬───────────┐
+│ date       ┆ ms_of_day    ┆ iv       ┆ delta    ┆ gamma    ┆ theta     ┆ vega      ┆ rho       │
+╞════════════╪══════════════╪══════════╪══════════╪══════════╪═══════════╪═══════════╪═══════════╡
+│ 2026-04-02 ┆ 09:30:00.000 ┆ 0.000000 ┆ 1.000000 ┆ 0.000000 ┆ 0.000000  ┆ 0.000000  ┆ 0.000000  │
+│ 2026-04-02 ┆ 09:31:00.000 ┆ 0.444300 ┆ 0.968700 ┆ 0.000000 ┆ -0.189700 ┆ 9.232200  ┆ 21.707600 │
+│ 2026-04-02 ┆ 09:32:00.000 ┆ 0.434800 ┆ 0.971900 ┆ 0.000000 ┆ -0.175500 ┆ 8.445900  ┆ 21.796300 │
+│ 2026-04-02 ┆ 09:33:00.000 ┆ 0.455000 ┆ 0.965300 ┆ 0.000000 ┆ -0.205000 ┆ 10.037800 ┆ 21.614100 │
+│ 2026-04-02 ┆ 09:34:00.000 ┆ 0.437900 ┆ 0.970500 ┆ 0.000000 ┆ -0.181200 ┆ 8.778500  ┆ 21.759000 │
+│ 2026-04-02 ┆ 09:35:00.000 ┆ 0.429100 ┆ 0.973100 ┆ 0.000000 ┆ -0.169500 ┆ 8.131200  ┆ 21.831100 │
+│ 2026-04-02 ┆ 09:36:00.000 ┆ 0.472100 ┆ 0.959700 ┆ 0.000000 ┆ -0.230900 ┆ 11.350000 ┆ 21.456500 │
+│ 2026-04-02 ┆ 09:37:00.000 ┆ 0.477100 ┆ 0.958000 ┆ 0.000000 ┆ -0.238600 ┆ 11.721600 ┆ 21.410600 │
+│ 2026-04-02 ┆ 09:38:00.000 ┆ 0.457000 ┆ 0.964400 ┆ 0.000000 ┆ -0.208900 ┆ 10.257600 ┆ 21.588200 │
+│ 2026-04-02 ┆ 09:39:00.000 ┆ 0.478000 ┆ 0.957500 ┆ 0.000000 ┆ -0.241000 ┆ 11.851400 ┆ 21.394500 │
+│ 2026-04-02 ┆ 09:40:00.000 ┆ 0.474300 ┆ 0.957800 ┆ 0.000000 ┆ -0.238200 ┆ 11.763100 ┆ 21.405500 │
+│ 2026-04-02 ┆ 09:41:00.000 ┆ 0.438400 ┆ 0.968600 ┆ 0.000000 ┆ -0.188000 ┆ 9.241000  ┆ 21.706500 │
+```
+**PASS** (13 rows)
+
+## 39. option history_greeks_second_order
+```
+$ tdx option history_greeks_second_order SPY 20260417 550 C 20260402 60000
+error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an option endpoint requiring a professional subscription, but you only have a STANDARD subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
+```
+**SKIP** -- requires professional subscription
+
+## 40. option history_greeks_third_order
+```
+$ tdx option history_greeks_third_order SPY 20260417 550 C 20260402 60000
+error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an option endpoint requiring a professional subscription, but you only have a STANDARD subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
+```
+**SKIP** -- requires professional subscription
+
+## 41. option history_greeks_iv
+```
+$ tdx option history_greeks_implied_volatility SPY 20260417 550 C 20260402 60000
+┌────────────┬──────────────┬────────────────────┬────────────┐
+│ date       ┆ ms_of_day    ┆ implied_volatility ┆ iv_error   │
+╞════════════╪══════════════╪════════════════════╪════════════╡
+│ 2026-04-02 ┆ 09:30:00.000 ┆ 0.000000           ┆ 100.000000 │
+│ 2026-04-02 ┆ 09:31:00.000 ┆ 0.444300           ┆ 0.000000   │
+│ 2026-04-02 ┆ 09:32:00.000 ┆ 0.434800           ┆ 0.003900   │
+│ 2026-04-02 ┆ 09:33:00.000 ┆ 0.455000           ┆ 0.003000   │
+│ 2026-04-02 ┆ 09:34:00.000 ┆ 0.437900           ┆ 0.003700   │
+│ 2026-04-02 ┆ 09:35:00.000 ┆ 0.429100           ┆ 0.004100   │
+│ 2026-04-02 ┆ 09:36:00.000 ┆ 0.472100           ┆ 0.001600   │
+│ 2026-04-02 ┆ 09:37:00.000 ┆ 0.477100           ┆ 0.001300   │
+│ 2026-04-02 ┆ 09:38:00.000 ┆ 0.457000           ┆ 0.002600   │
+│ 2026-04-02 ┆ 09:39:00.000 ┆ 0.478000           ┆ 0.001100   │
+│ 2026-04-02 ┆ 09:40:00.000 ┆ 0.474300           ┆ 0.001300   │
+│ 2026-04-02 ┆ 09:41:00.000 ┆ 0.438400           ┆ 0.003100   │
+```
+**PASS** (13 rows)
+
+## 42. option history_trade_greeks_all
+```
+$ tdx option history_trade_greeks_all SPY 20260417 550 C 20260402
+error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an option endpoint requiring a professional subscription, but you only have a STANDARD subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
+```
+**SKIP** -- requires professional subscription
+
+## 43. option history_trade_greeks_first
+```
+$ tdx option history_trade_greeks_first_order SPY 20260417 550 C 20260402
+error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an option endpoint requiring a professional subscription, but you only have a STANDARD subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
+```
+**SKIP** -- requires professional subscription
+
+## 44. option history_trade_greeks_second
+```
+$ tdx option history_trade_greeks_second_order SPY 20260417 550 C 20260402
+error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an option endpoint requiring a professional subscription, but you only have a STANDARD subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
+```
+**SKIP** -- requires professional subscription
+
+## 45. option history_trade_greeks_third
+```
+$ tdx option history_trade_greeks_third_order SPY 20260417 550 C 20260402
+error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an option endpoint requiring a professional subscription, but you only have a STANDARD subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
+```
+**SKIP** -- requires professional subscription
+
+## 46. option history_trade_greeks_iv
+```
+$ tdx option history_trade_greeks_implied_volatility SPY 20260417 550 C 20260402
+error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an option endpoint requiring a professional subscription, but you only have a STANDARD subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
+```
+**SKIP** -- requires professional subscription
+
+## 47. option at_time_trade
 ```
 $ tdx option at_time_trade SPY 20260417 550 C 20260401 20260402 34200000
 error: gRPC status: code: 'Some requested entity was not found', message: "No data found for your request"
 ```
+**OK** -- no data for query (valid response)
 
-**Result: FAIL**
-
-## option at_time_quote
+## 48. option at_time_quote
 ```
 $ tdx option at_time_quote SPY 20260417 550 C 20260401 20260402 34200000
 ┌────────────┬──────────────┬──────────┬──────────────┬──────┬───────────────┬──────────┬──────────────┬──────┬───────────────┐
@@ -483,10 +648,9 @@ $ tdx option at_time_quote SPY 20260417 550 C 20260401 20260402 34200000
 └────────────┴──────────────┴──────────┴──────────────┴──────┴───────────────┴──────────┴──────────────┴──────┴───────────────┘
 2 rows
 ```
+**PASS** (3 rows)
 
-**Result: PASS (3 rows)**
-
-## index list_symbols
+## 49. index list_symbols
 ```
 $ tdx index list_symbols
 ┌───────────────────────────────┐
@@ -501,11 +665,13 @@ $ tdx index list_symbols
 │ 1500PVTR                      │
 │ 500GNTR                       │
 │ 500KRW                        │
+│ 500KRWN                       │
+│ 500KRWT                       │
+│ 500VNTR                       │
 ```
+**PASS** (13 rows)
 
-**Result: PASS (10 rows)**
-
-## index list_dates
+## 50. index list_dates
 ```
 $ tdx index list_dates SPX
 ┌────────────┐
@@ -520,35 +686,34 @@ $ tdx index list_dates SPX
 │ 2017-01-11 │
 │ 2017-01-12 │
 │ 2017-01-13 │
+│ 2017-01-17 │
+│ 2017-01-18 │
+│ 2017-01-19 │
 ```
+**PASS** (13 rows)
 
-**Result: PASS (10 rows)**
-
-## index snapshot_ohlc
+## 51. index snapshot_ohlc
 ```
 $ tdx index snapshot_ohlc SPX
 error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an index endpoint requiring a standard subscription, but you only have a FREE subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
 ```
+**SKIP** -- requires standard subscription
 
-**Result: FAIL**
-
-## index snapshot_price
+## 52. index snapshot_price
 ```
 $ tdx index snapshot_price SPX
 error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an index endpoint requiring a standard subscription, but you only have a FREE subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
 ```
+**SKIP** -- requires standard subscription
 
-**Result: FAIL**
-
-## index snapshot_market_value
+## 53. index snapshot_market_value
 ```
 $ tdx index snapshot_market_value SPX
 error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an index endpoint requiring a standard subscription, but you only have a FREE subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
 ```
+**SKIP** -- requires standard subscription
 
-**Result: FAIL**
-
-## index history_eod
+## 54. index history_eod
 ```
 $ tdx index history_eod SPX 20260401 20260402
 ┌────────────┬──────────────┬──────────────┬─────────┬─────────┬─────────┬─────────┬────────┬───────┬──────────┬──────────────┬──────┬───────────────┬──────────┬──────────────┬──────┬───────────────┐
@@ -559,37 +724,30 @@ $ tdx index history_eod SPX 20260401 20260402
 └────────────┴──────────────┴──────────────┴─────────┴─────────┴─────────┴─────────┴────────┴───────┴──────────┴──────────────┴──────┴───────────────┴──────────┴──────────────┴──────┴───────────────┘
 2 rows
 ```
+**PASS** (3 rows)
 
-**Result: PASS (3 rows)**
-
-## index history_ohlc
+## 55. index history_ohlc
 ```
 $ tdx index history_ohlc SPX 20260401 20260402 60000
 error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an index endpoint requiring a standard subscription, but you only have a FREE subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
 ```
+**SKIP** -- requires standard subscription
 
-**Result: FAIL**
-
-## index history_price
+## 56. index history_price
 ```
-$ tdx index history_price SPX 20260402 60000
-
-thread 'main' (3492078) panicked at tools/cli/src/main.rs:162:12:
-missing required argument: interval
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+$ tdx index history_price 20260402 SPX 60000
+error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an index endpoint requiring a value subscription, but you only have a FREE subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
 ```
+**SKIP** -- requires value subscription
 
-**Result: FAIL**
-
-## index at_time_price
+## 57. index at_time_price
 ```
 $ tdx index at_time_price SPX 20260401 20260402 34200000
 error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an index endpoint requiring a value subscription, but you only have a FREE subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
 ```
+**SKIP** -- requires value subscription
 
-**Result: FAIL**
-
-## calendar open_today
+## 58. calendar open_today
 ```
 $ tdx calendar open_today
 ┌──────┬─────────┬──────────────┬──────────────┬────────┐
@@ -599,10 +757,9 @@ $ tdx calendar open_today
 └──────┴─────────┴──────────────┴──────────────┴────────┘
 1 rows
 ```
+**PASS** (2 rows)
 
-**Result: PASS (2 rows)**
-
-## calendar on_date
+## 59. calendar on_date
 ```
 $ tdx calendar on_date 20260406
 ┌──────┬─────────┬──────────────┬──────────────┬────────┐
@@ -612,10 +769,9 @@ $ tdx calendar on_date 20260406
 └──────┴─────────┴──────────────┴──────────────┴────────┘
 1 rows
 ```
+**PASS** (2 rows)
 
-**Result: PASS (2 rows)**
-
-## calendar year
+## 60. calendar year
 ```
 $ tdx calendar year 2026
 ┌────────────┬─────────┬──────────────┬──────────────┬────────┐
@@ -630,15 +786,26 @@ $ tdx calendar year 2026
 │ 2026-07-03 ┆ 0       ┆ 00:00:00.000 ┆ 00:00:00.000 ┆ 2      │
 │ 2026-09-07 ┆ 0       ┆ 00:00:00.000 ┆ 00:00:00.000 ┆ 2      │
 │ 2026-11-26 ┆ 0       ┆ 00:00:00.000 ┆ 00:00:00.000 ┆ 2      │
+│ 2026-11-27 ┆ 1       ┆ 09:30:00.000 ┆ 13:00:00.000 ┆ 1      │
+│ 2026-12-24 ┆ 1       ┆ 09:30:00.000 ┆ 13:00:00.000 ┆ 1      │
+│ 2026-12-25 ┆ 0       ┆ 00:00:00.000 ┆ 00:00:00.000 ┆ 2      │
 ```
+**PASS** (13 rows)
 
-**Result: PASS (10 rows)**
-
-## rate history_eod
+## 61. rate history_eod
 ```
 $ tdx rate history_eod SOFR 20260401 20260402
 error: gRPC status: code: 'The caller does not have permission to execute the specified operation', message: "Requesting an interest rate endpoint requiring a value subscription, but you only have a FREE subscription. Please consider upgrading! ( https://www.thetadata.net/subscribe )"
 ```
+**SKIP** -- requires value subscription
 
-**Result: FAIL**
+---
+## Summary
 
+| Status | Count |
+|--------|-------|
+| PASS | 42 |
+| SKIP (subscription) | 18 |
+| OK (no data) | 1 |
+| FAIL | 0 |
+| **Total** | **61** |
