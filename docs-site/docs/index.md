@@ -78,7 +78,7 @@ async fn main() -> Result<(), thetadatadx::Error> {
 
     let quotes = tdx.stock_history_quote("AAPL", "20250115", "60000").await?;
     for q in &quotes {
-        println!("{}: bid={} ask={}", q.date, q.bid_price(), q.ask_price());
+        println!("{}: bid={} ask={}", q.date, q.bid, q.ask);
     }
     Ok(())
 }

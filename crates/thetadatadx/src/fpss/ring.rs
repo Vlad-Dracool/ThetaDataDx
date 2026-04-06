@@ -253,18 +253,16 @@ mod tests {
         producer.publish(|slot| {
             slot.event = Some(FpssEvent::Data(FpssData::Quote {
                 contract_id: 42,
+                symbol: std::sync::Arc::from(""),
                 ms_of_day: 34200000,
                 bid_size: 100,
                 bid_exchange: 1,
-                bid: 15025,
-                bid_f64: 150.25,
+                bid: 150.25,
                 bid_condition: 0,
                 ask_size: 200,
                 ask_exchange: 1,
-                ask: 15030,
-                ask_f64: 150.30,
+                ask: 150.30,
                 ask_condition: 0,
-                price_type: 8,
                 date: 20240315,
                 received_at_ns: 0,
             }));
@@ -282,8 +280,8 @@ mod tests {
                 ..
             }) => {
                 assert_eq!(*contract_id, 42);
-                assert_eq!(*bid, 15025);
-                assert_eq!(*ask, 15030);
+                assert!((bid - 150.25).abs() < f64::EPSILON);
+                assert!((ask - 150.30).abs() < f64::EPSILON);
             }
             other => panic!("expected Data(Quote), got {other:?}"),
         }
@@ -350,18 +348,16 @@ mod tests {
             producer.publish(|slot| {
                 slot.event = Some(FpssEvent::Data(FpssData::Quote {
                     contract_id: i as i32,
+                    symbol: std::sync::Arc::from(""),
                     ms_of_day: 0,
                     bid_size: 0,
                     bid_exchange: 0,
-                    bid: 0,
-                    bid_f64: 0.0,
+                    bid: 0.0,
                     bid_condition: 0,
                     ask_size: 0,
                     ask_exchange: 0,
-                    ask: 0,
-                    ask_f64: 0.0,
+                    ask: 0.0,
                     ask_condition: 0,
-                    price_type: 0,
                     date: 0,
                     received_at_ns: 0,
                 }));

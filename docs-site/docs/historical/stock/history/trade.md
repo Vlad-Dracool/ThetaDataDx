@@ -13,29 +13,31 @@ Retrieve every trade execution for a stock on a given date. Returns tick-level d
 
 ::: code-group
 ```rust [Rust]
-let trades: Vec<TradeTick> = tdx.stock_history_trade("AAPL", "20240315").await?;
-println!("{} trades", trades.len());
-
-// Stream variant for large responses
-tdx.stock_history_trade_stream("AAPL", "20240315", |chunk| {
-    println!("Got {} trades in this chunk", chunk.len());
-    Ok(())
-}).await?;
+let data = tdx.stock_history_trade("SPY", "20260315").await?;
+for t in &data {
+    println!("date={} ms_of_day={} price={:.2} size={} exchange={} condition={} sequence={}",
+        t.date, t.ms_of_day, t.price, t.size, t.exchange, t.condition, t.sequence);
+}
 ```
 ```python [Python]
-trades = tdx.stock_history_trade("AAPL", "20240315")
-print(f"{len(trades)} trades")
+data = tdx.stock_history_trade("SPY", "20260315")
+for t in data:
+    print(f"date={t['date']} ms_of_day={t['ms_of_day']} price={t['price']:.2f} "
+          f"size={t['size']} exchange={t['exchange']} condition={t['condition']} sequence={t['sequence']}")
 ```
 ```go [Go]
-trades, err := client.StockHistoryTrade("AAPL", "20240315")
-if err != nil {
-    log.Fatal(err)
+data, _ := client.StockHistoryTrade("SPY", "20260315")
+for _, t := range data {
+    fmt.Printf("date=%d ms_of_day=%d price=%.2f size=%d exchange=%d condition=%d sequence=%d\n",
+        t.Date, t.MsOfDay, t.Price, t.Size, t.Exchange, t.Condition, t.Sequence)
 }
-fmt.Printf("%d trades\n", len(trades))
 ```
 ```cpp [C++]
-auto trades = client.stock_history_trade("AAPL", "20240315");
-std::cout << trades.size() << " trades" << std::endl;
+auto data = client.stock_history_trade("SPY", "20260315");
+for (const auto& t : data) {
+    printf("date=%d ms_of_day=%d price=%.2f size=%d exchange=%d condition=%d sequence=%d\n",
+        t.date, t.ms_of_day, t.price, t.size, t.exchange, t.condition, t.sequence);
+}
 ```
 :::
 
@@ -93,7 +95,7 @@ std::cout << trades.size() << " trades" << std::endl;
 </div>
 <div class="param">
 <div class="param-header"><code>price</code><span class="param-type">i32</span></div>
-<div class="param-desc">Fixed-point price. Use <code>get_price()</code> for decoded <code>f64</code>.</div>
+<div class="param-desc">Trade price (<code>f64</code>, decoded at parse time).</div>
 </div>
 <div class="param">
 <div class="param-header"><code>condition_flags</code><span class="param-type">i32</span></div>
@@ -112,8 +114,6 @@ std::cout << trades.size() << " trades" << std::endl;
 <div class="param-desc">Records back count</div>
 </div>
 <div class="param">
-<div class="param-header"><code>price_type</code><span class="param-type">i32</span></div>
-<div class="param-desc">Decimal type for price decoding</div>
 </div>
 <div class="param">
 <div class="param-header"><code>date</code><span class="param-type">i32</span></div>
@@ -121,7 +121,7 @@ std::cout << trades.size() << " trades" << std::endl;
 </div>
 </div>
 
-Helper methods: `get_price()`, `is_cancelled()`, `regular_trading_hours()`, `is_seller()`, `is_incremental_volume()`
+Helper methods: `is_cancelled()`, `regular_trading_hours()`, `is_seller()`, `is_incremental_volume()`
 
 
 ### Sample Response

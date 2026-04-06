@@ -172,7 +172,7 @@ flowchart LR
     PARSERS --> DECODE
 ```
 
-The 14 generated tick types are: `TradeTick`, `QuoteTick`, `OhlcTick`, `EodTick`, `OpenInterestTick`, `SnapshotTradeTick`, `TradeQuoteTick`, `MarketValueTick`, `GreeksTick`, `IvTick`, `PriceTick`, `CalendarDay`, `InterestRateTick`, `OptionContract`. 10 of these (all except `CalendarDay`, `InterestRateTick`, `PriceTick`, `OptionContract`) carry contract identification fields (`expiration`, `strike`, `right`, `strike_price_type`) populated by the server on wildcard queries.
+The 14 generated tick types are: `TradeTick`, `QuoteTick`, `OhlcTick`, `EodTick`, `OpenInterestTick`, `SnapshotTradeTick`, `TradeQuoteTick`, `MarketValueTick`, `GreeksTick`, `IvTick`, `PriceTick`, `CalendarDay`, `InterestRateTick`, `OptionContract`. 10 of these (all except `CalendarDay`, `InterestRateTick`, `PriceTick`, `OptionContract`) carry contract identification fields (`expiration`, `strike`, `right`) populated by the server on wildcard queries.
 
 Adding a new tick type requires only adding a TOML table to `endpoint_schema.toml` - no hand-written struct or parser code needed. See `docs/endpoint-schema.md` for the full schema reference.
 
@@ -435,7 +435,7 @@ If the first byte of a row is `0xCE` (DATE marker), the entire row is consumed u
 
 ## Price Encoding
 
-Prices in ThetaData use a fixed-point `(value, type)` encoding where the real price is:
+Prices on the wire use a fixed-point `(value, type)` encoding. This is decoded to `f64` during parsing -- users never see raw integers. Internally, the formula is:
 
 ```
 real_price = value * 10^(type - 10)
@@ -450,7 +450,7 @@ real_price = value * 10^(type - 10)
 | 10 | 0 decimals | 1.0 | `(100, 10)` = 100.0 |
 | 12 | -2 decimals | 100.0 | `(5, 12)` = 500.0 |
 
-The `Price` struct provides `to_f64()` for float conversion and `Display` for formatted string output. Comparisons between prices of different types are handled by normalizing to a common base.
+The `Price` struct exists internally in `tdbe::types::price` for wire-level decoding. All public tick fields (`open`, `bid`, `price`, `strike`, etc.) are `f64` -- decoded at parse time.
 
 ## FIE String Encoding
 

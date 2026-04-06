@@ -7,25 +7,33 @@ description: Intraday price history for an index.
 
 <TierBadge tier="standard" />
 
-Retrieve intraday price history for an index on a single date at a specified interval. Returns price data as `Vec<PriceTick>`.
+Retrieve intraday price history for an index on a single date at a specified interval.
 
 ## Code Example
 
 ::: code-group
 ```rust [Rust]
-let ticks: Vec<PriceTick> = tdx.index_history_price("SPX", "20240315", "60000").await?;
+let data = tdx.index_history_price("SPX", "20260315", "60000").await?;
+for t in &data {
+    println!("date={} ms_of_day={} price={:.2}", t.date, t.ms_of_day, t.price);
+}
 ```
 ```python [Python]
-price = tdx.index_history_price("SPX", "20240315", "60000")
+data = tdx.index_history_price("SPX", "20260315", "60000")
+for t in data:
+    print(f"date={t['date']} ms_of_day={t['ms_of_day']} price={t['price']:.2f}")
 ```
 ```go [Go]
-priceHist, err := client.IndexHistoryPrice("SPX", "20240315", "60000")
-if err != nil {
-    log.Fatal(err)
+data, _ := client.IndexHistoryPrice("SPX", "20260315", "60000")
+for _, t := range data {
+    fmt.Printf("date=%d ms_of_day=%d price=%.2f\n", t.Date, t.MsOfDay, t.Price)
 }
 ```
 ```cpp [C++]
-auto price_hist = client.index_history_price("SPX", "20240315", "60000");
+auto data = client.index_history_price("SPX", "20260315", "60000");
+for (const auto& t : data) {
+    printf("date=%d ms_of_day=%d price=%.2f\n", t.date, t.ms_of_day, t.price);
+}
 ```
 :::
 
@@ -56,7 +64,7 @@ auto price_hist = client.index_history_price("SPX", "20240315", "60000");
 
 ## Response
 
-Returns a `Vec<PriceTick>` with price and time fields:
+Returns an array of PriceTick records with price and time fields:
 
 <div class="param-list">
 <div class="param">
@@ -88,6 +96,6 @@ Returns a `Vec<PriceTick>` with price and time fields:
 
 ## Notes
 
-- Returns `Vec<PriceTick>` in Rust.
+- Returns an array of PriceTick records (typed per SDK).
 - For OHLC-structured data across a date range, use [index_history_ohlc](./ohlc) instead.
 - Operates on a single date only. For multi-day queries, use [index_history_eod](./eod) or [index_history_ohlc](./ohlc).

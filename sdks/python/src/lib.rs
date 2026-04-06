@@ -26,7 +26,7 @@ fn runtime() -> &'static tokio::runtime::Runtime {
 
 fn to_py_err(e: thetadatadx::Error) -> PyErr {
     match e {
-        thetadatadx::Error::Auth(msg) => PyConnectionError::new_err(msg),
+        thetadatadx::Error::Auth { message, .. } => PyConnectionError::new_err(message),
         thetadatadx::Error::Config(msg) => PyValueError::new_err(msg),
         _ => PyRuntimeError::new_err(e.to_string()),
     }
@@ -166,11 +166,7 @@ macro_rules! set_contract_id {
     ($dict:expr, $tick:expr) => {
         if $tick.expiration != 0 {
             $dict.set_item("expiration", $tick.expiration).unwrap();
-            $dict
-                .set_item("strike", $tick.strike_price())
-                .unwrap();
-            $dict.set_item("strike_raw", $tick.strike).unwrap();
-            $dict.set_item("strike_price_type", $tick.strike_price_type).unwrap();
+            $dict.set_item("strike", $tick.strike).unwrap();
             $dict
                 .set_item(
                     "right",
@@ -198,9 +194,7 @@ fn trade_tick_to_dict(py: Python<'_>, t: &tick::TradeTick) -> Py<PyAny> {
     dict.set_item("condition", t.condition).unwrap();
     dict.set_item("size", t.size).unwrap();
     dict.set_item("exchange", t.exchange).unwrap();
-    dict.set_item("price", t.get_price().to_f64()).unwrap();
-    dict.set_item("price_raw", t.price).unwrap();
-    dict.set_item("price_type", t.price_type).unwrap();
+    dict.set_item("price", t.price).unwrap();
     dict.set_item("condition_flags", t.condition_flags).unwrap();
     dict.set_item("price_flags", t.price_flags).unwrap();
     dict.set_item("volume_type", t.volume_type).unwrap();
@@ -215,15 +209,13 @@ fn quote_tick_to_dict(py: Python<'_>, q: &tick::QuoteTick) -> Py<PyAny> {
     dict.set_item("ms_of_day", q.ms_of_day).unwrap();
     dict.set_item("bid_size", q.bid_size).unwrap();
     dict.set_item("bid_exchange", q.bid_exchange).unwrap();
-    dict.set_item("bid", q.bid_price().to_f64()).unwrap();
-    dict.set_item("bid_raw", q.bid).unwrap();
+    dict.set_item("bid", q.bid).unwrap();
     dict.set_item("bid_condition", q.bid_condition).unwrap();
     dict.set_item("ask_size", q.ask_size).unwrap();
     dict.set_item("ask_exchange", q.ask_exchange).unwrap();
-    dict.set_item("ask", q.ask_price().to_f64()).unwrap();
-    dict.set_item("ask_raw", q.ask).unwrap();
+    dict.set_item("ask", q.ask).unwrap();
     dict.set_item("ask_condition", q.ask_condition).unwrap();
-    dict.set_item("price_type", q.price_type).unwrap();
+    dict.set_item("midpoint", q.midpoint).unwrap();
     dict.set_item("date", q.date).unwrap();
     set_contract_id!(dict, q);
     dict.into_any().unbind()
@@ -232,17 +224,12 @@ fn quote_tick_to_dict(py: Python<'_>, q: &tick::QuoteTick) -> Py<PyAny> {
 fn ohlc_tick_to_dict(py: Python<'_>, o: &tick::OhlcTick) -> Py<PyAny> {
     let dict = PyDict::new(py);
     dict.set_item("ms_of_day", o.ms_of_day).unwrap();
-    dict.set_item("open", o.open_price().to_f64()).unwrap();
-    dict.set_item("open_raw", o.open).unwrap();
-    dict.set_item("high", o.high_price().to_f64()).unwrap();
-    dict.set_item("high_raw", o.high).unwrap();
-    dict.set_item("low", o.low_price().to_f64()).unwrap();
-    dict.set_item("low_raw", o.low).unwrap();
-    dict.set_item("close", o.close_price().to_f64()).unwrap();
-    dict.set_item("close_raw", o.close).unwrap();
+    dict.set_item("open", o.open).unwrap();
+    dict.set_item("high", o.high).unwrap();
+    dict.set_item("low", o.low).unwrap();
+    dict.set_item("close", o.close).unwrap();
     dict.set_item("volume", o.volume).unwrap();
     dict.set_item("count", o.count).unwrap();
-    dict.set_item("price_type", o.price_type).unwrap();
     dict.set_item("date", o.date).unwrap();
     set_contract_id!(dict, o);
     dict.into_any().unbind()
@@ -252,27 +239,20 @@ fn eod_tick_to_dict(py: Python<'_>, e: &tick::EodTick) -> Py<PyAny> {
     let dict = PyDict::new(py);
     dict.set_item("ms_of_day", e.ms_of_day).unwrap();
     dict.set_item("ms_of_day2", e.ms_of_day2).unwrap();
-    dict.set_item("open", e.open_price().to_f64()).unwrap();
-    dict.set_item("open_raw", e.open).unwrap();
-    dict.set_item("high", e.high_price().to_f64()).unwrap();
-    dict.set_item("high_raw", e.high).unwrap();
-    dict.set_item("low", e.low_price().to_f64()).unwrap();
-    dict.set_item("low_raw", e.low).unwrap();
-    dict.set_item("close", e.close_price().to_f64()).unwrap();
-    dict.set_item("close_raw", e.close).unwrap();
+    dict.set_item("open", e.open).unwrap();
+    dict.set_item("high", e.high).unwrap();
+    dict.set_item("low", e.low).unwrap();
+    dict.set_item("close", e.close).unwrap();
     dict.set_item("volume", e.volume).unwrap();
     dict.set_item("count", e.count).unwrap();
     dict.set_item("bid_size", e.bid_size).unwrap();
     dict.set_item("bid_exchange", e.bid_exchange).unwrap();
-    dict.set_item("bid", e.bid_price().to_f64()).unwrap();
-    dict.set_item("bid_raw", e.bid).unwrap();
+    dict.set_item("bid", e.bid).unwrap();
     dict.set_item("bid_condition", e.bid_condition).unwrap();
     dict.set_item("ask_size", e.ask_size).unwrap();
     dict.set_item("ask_exchange", e.ask_exchange).unwrap();
-    dict.set_item("ask", e.ask_price().to_f64()).unwrap();
-    dict.set_item("ask_raw", e.ask).unwrap();
+    dict.set_item("ask", e.ask).unwrap();
     dict.set_item("ask_condition", e.ask_condition).unwrap();
-    dict.set_item("price_type", e.price_type).unwrap();
     dict.set_item("date", e.date).unwrap();
     set_contract_id!(dict, e);
     dict.into_any().unbind()
@@ -289,8 +269,7 @@ fn trade_quote_tick_to_dict(py: Python<'_>, t: &tick::TradeQuoteTick) -> Py<PyAn
     dict.set_item("condition", t.condition).unwrap();
     dict.set_item("size", t.size).unwrap();
     dict.set_item("exchange", t.exchange).unwrap();
-    dict.set_item("price", t.trade_price().to_f64()).unwrap();
-    dict.set_item("price_raw", t.price).unwrap();
+    dict.set_item("price", t.price).unwrap();
     dict.set_item("condition_flags", t.condition_flags).unwrap();
     dict.set_item("price_flags", t.price_flags).unwrap();
     dict.set_item("volume_type", t.volume_type).unwrap();
@@ -298,16 +277,12 @@ fn trade_quote_tick_to_dict(py: Python<'_>, t: &tick::TradeQuoteTick) -> Py<PyAn
     dict.set_item("quote_ms_of_day", t.quote_ms_of_day).unwrap();
     dict.set_item("bid_size", t.bid_size).unwrap();
     dict.set_item("bid_exchange", t.bid_exchange).unwrap();
-    dict.set_item("bid", t.bid_price().to_f64()).unwrap();
-    dict.set_item("bid_raw", t.bid).unwrap();
+    dict.set_item("bid", t.bid).unwrap();
     dict.set_item("bid_condition", t.bid_condition).unwrap();
     dict.set_item("ask_size", t.ask_size).unwrap();
     dict.set_item("ask_exchange", t.ask_exchange).unwrap();
-    dict.set_item("ask", t.ask_price().to_f64()).unwrap();
-    dict.set_item("ask_raw", t.ask).unwrap();
+    dict.set_item("ask", t.ask).unwrap();
     dict.set_item("ask_condition", t.ask_condition).unwrap();
-    dict.set_item("quote_price_type", t.quote_price_type).unwrap();
-    dict.set_item("price_type", t.price_type).unwrap();
     dict.set_item("date", t.date).unwrap();
     set_contract_id!(dict, t);
     dict.into_any().unbind()
@@ -382,9 +357,7 @@ fn iv_tick_to_dict(py: Python<'_>, t: &tick::IvTick) -> Py<PyAny> {
 fn price_tick_to_dict(py: Python<'_>, t: &tick::PriceTick) -> Py<PyAny> {
     let dict = PyDict::new(py);
     dict.set_item("ms_of_day", t.ms_of_day).unwrap();
-    dict.set_item("price", t.get_price().to_f64()).unwrap();
-    dict.set_item("price_raw", t.price).unwrap();
-    dict.set_item("price_type", t.price_type).unwrap();
+    dict.set_item("price", t.price).unwrap();
     dict.set_item("date", t.date).unwrap();
     dict.into_any().unbind()
 }
@@ -413,8 +386,6 @@ fn option_contract_to_dict(py: Python<'_>, c: &tick::OptionContract) -> Py<PyAny
     dict.set_item("expiration", c.expiration).unwrap();
     dict.set_item("strike", c.strike).unwrap();
     dict.set_item("right", c.right).unwrap();
-    dict.set_item("strike_price_type", c.strike_price_type)
-        .unwrap();
     dict.into_any().unbind()
 }
 
@@ -531,8 +502,6 @@ enum BufferedEvent {
         size: i32,
         exchange: i32,
         price: f64,
-        price_raw: i32,
-        price_type: i32,
         condition_flags: i32,
         price_flags: i32,
         volume_type: i32,
@@ -571,11 +540,6 @@ enum BufferedEvent {
     },
 }
 
-/// Convert raw integer price to f64 using ThetaData's price_type encoding.
-fn price_to_f64(value: i32, price_type: i32) -> f64 {
-    tdbe::types::price::Price::new(value, price_type).to_f64()
-}
-
 fn fpss_event_to_buffered(event: &fpss::FpssEvent) -> BufferedEvent {
     match event {
         fpss::FpssEvent::Data(data) => match data {
@@ -590,7 +554,6 @@ fn fpss_event_to_buffered(event: &fpss::FpssEvent) -> BufferedEvent {
                 ask_exchange,
                 ask,
                 ask_condition,
-                price_type,
                 date,
                 received_at_ns,
                 ..
@@ -599,11 +562,11 @@ fn fpss_event_to_buffered(event: &fpss::FpssEvent) -> BufferedEvent {
                 ms_of_day: *ms_of_day,
                 bid_size: *bid_size,
                 bid_exchange: *bid_exchange,
-                bid: price_to_f64(*bid, *price_type),
+                bid: *bid,
                 bid_condition: *bid_condition,
                 ask_size: *ask_size,
                 ask_exchange: *ask_exchange,
-                ask: price_to_f64(*ask, *price_type),
+                ask: *ask,
                 ask_condition: *ask_condition,
                 date: *date,
                 received_at_ns: *received_at_ns,
@@ -624,7 +587,6 @@ fn fpss_event_to_buffered(event: &fpss::FpssEvent) -> BufferedEvent {
                 price_flags,
                 volume_type,
                 records_back,
-                price_type,
                 date,
                 received_at_ns,
                 ..
@@ -639,9 +601,7 @@ fn fpss_event_to_buffered(event: &fpss::FpssEvent) -> BufferedEvent {
                 condition: *condition,
                 size: *size,
                 exchange: *exchange,
-                price: price_to_f64(*price, *price_type),
-                price_raw: *price,
-                price_type: *price_type,
+                price: *price,
                 condition_flags: *condition_flags,
                 price_flags: *price_flags,
                 volume_type: *volume_type,
@@ -671,17 +631,16 @@ fn fpss_event_to_buffered(event: &fpss::FpssEvent) -> BufferedEvent {
                 close,
                 volume,
                 count,
-                price_type,
                 date,
                 received_at_ns,
                 ..
             } => BufferedEvent::Ohlcvc {
                 contract_id: *contract_id,
                 ms_of_day: *ms_of_day,
-                open: price_to_f64(*open, *price_type),
-                high: price_to_f64(*high, *price_type),
-                low: price_to_f64(*low, *price_type),
-                close: price_to_f64(*close, *price_type),
+                open: *open,
+                high: *high,
+                low: *low,
+                close: *close,
                 volume: *volume,
                 count: *count,
                 date: *date,
@@ -795,8 +754,6 @@ fn buffered_event_to_py(py: Python<'_>, event: &BufferedEvent) -> Py<PyAny> {
             size,
             exchange,
             price,
-            price_raw,
-            price_type,
             condition_flags,
             price_flags,
             volume_type,
@@ -816,8 +773,6 @@ fn buffered_event_to_py(py: Python<'_>, event: &BufferedEvent) -> Py<PyAny> {
             dict.set_item("size", size).unwrap();
             dict.set_item("exchange", exchange).unwrap();
             dict.set_item("price", price).unwrap();
-            dict.set_item("price_raw", price_raw).unwrap();
-            dict.set_item("price_type", price_type).unwrap();
             dict.set_item("condition_flags", condition_flags).unwrap();
             dict.set_item("price_flags", price_flags).unwrap();
             dict.set_item("volume_type", volume_type).unwrap();
@@ -959,19 +914,19 @@ impl ThetaDataDx {
     // ── Streaming methods ──
 
     /// Subscribe to quote data for a stock symbol.
-    fn subscribe_quotes(&self, symbol: &str) -> PyResult<i32> {
+    fn subscribe_quotes(&self, symbol: &str) -> PyResult<()> {
         let contract = fpss::protocol::Contract::stock(symbol);
         self.tdx.subscribe_quotes(&contract).map_err(to_py_err)
     }
 
     /// Subscribe to trade data for a stock symbol.
-    fn subscribe_trades(&self, symbol: &str) -> PyResult<i32> {
+    fn subscribe_trades(&self, symbol: &str) -> PyResult<()> {
         let contract = fpss::protocol::Contract::stock(symbol);
         self.tdx.subscribe_trades(&contract).map_err(to_py_err)
     }
 
     /// Subscribe to open interest data for a stock symbol.
-    fn subscribe_open_interest(&self, symbol: &str) -> PyResult<i32> {
+    fn subscribe_open_interest(&self, symbol: &str) -> PyResult<()> {
         let contract = fpss::protocol::Contract::stock(symbol);
         self.tdx
             .subscribe_open_interest(&contract)
@@ -982,11 +937,11 @@ impl ThetaDataDx {
     fn subscribe_option_quotes(
         &self,
         symbol: &str,
-        exp_date: i32,
-        is_call: bool,
-        strike: i32,
-    ) -> PyResult<i32> {
-        let contract = fpss::protocol::Contract::option(symbol, exp_date, is_call, strike);
+        exp_date: &str,
+        right: &str,
+        strike: &str,
+    ) -> PyResult<()> {
+        let contract = fpss::protocol::Contract::option(symbol, exp_date, strike, right);
         self.tdx.subscribe_quotes(&contract).map_err(to_py_err)
     }
 
@@ -994,11 +949,11 @@ impl ThetaDataDx {
     fn subscribe_option_trades(
         &self,
         symbol: &str,
-        exp_date: i32,
-        is_call: bool,
-        strike: i32,
-    ) -> PyResult<i32> {
-        let contract = fpss::protocol::Contract::option(symbol, exp_date, is_call, strike);
+        exp_date: &str,
+        right: &str,
+        strike: &str,
+    ) -> PyResult<()> {
+        let contract = fpss::protocol::Contract::option(symbol, exp_date, strike, right);
         self.tdx.subscribe_trades(&contract).map_err(to_py_err)
     }
 
@@ -1006,54 +961,54 @@ impl ThetaDataDx {
     fn subscribe_option_open_interest(
         &self,
         symbol: &str,
-        exp_date: i32,
-        is_call: bool,
-        strike: i32,
-    ) -> PyResult<i32> {
-        let contract = fpss::protocol::Contract::option(symbol, exp_date, is_call, strike);
+        exp_date: &str,
+        right: &str,
+        strike: &str,
+    ) -> PyResult<()> {
+        let contract = fpss::protocol::Contract::option(symbol, exp_date, strike, right);
         self.tdx
             .subscribe_open_interest(&contract)
             .map_err(to_py_err)
     }
 
     /// Subscribe to all trades for a security type (full trade stream).
-    fn subscribe_full_trades(&self, sec_type: &str) -> PyResult<i32> {
+    fn subscribe_full_trades(&self, sec_type: &str) -> PyResult<()> {
         let st = parse_sec_type(sec_type)?;
         self.tdx.subscribe_full_trades(st).map_err(to_py_err)
     }
 
     /// Subscribe to all open interest for a security type (full OI stream).
-    fn subscribe_full_open_interest(&self, sec_type: &str) -> PyResult<i32> {
+    fn subscribe_full_open_interest(&self, sec_type: &str) -> PyResult<()> {
         let st = parse_sec_type(sec_type)?;
         self.tdx.subscribe_full_open_interest(st).map_err(to_py_err)
     }
 
     /// Unsubscribe from all trades for a security type (full trade stream).
-    fn unsubscribe_full_trades(&self, sec_type: &str) -> PyResult<i32> {
+    fn unsubscribe_full_trades(&self, sec_type: &str) -> PyResult<()> {
         let st = parse_sec_type(sec_type)?;
         self.tdx.unsubscribe_full_trades(st).map_err(to_py_err)
     }
 
     /// Unsubscribe from all open interest for a security type (full OI stream).
-    fn unsubscribe_full_open_interest(&self, sec_type: &str) -> PyResult<i32> {
+    fn unsubscribe_full_open_interest(&self, sec_type: &str) -> PyResult<()> {
         let st = parse_sec_type(sec_type)?;
         self.tdx.unsubscribe_full_open_interest(st).map_err(to_py_err)
     }
 
     /// Unsubscribe from quote data for a stock symbol.
-    fn unsubscribe_quotes(&self, symbol: &str) -> PyResult<i32> {
+    fn unsubscribe_quotes(&self, symbol: &str) -> PyResult<()> {
         let contract = fpss::protocol::Contract::stock(symbol);
         self.tdx.unsubscribe_quotes(&contract).map_err(to_py_err)
     }
 
     /// Unsubscribe from trade data for a stock symbol.
-    fn unsubscribe_trades(&self, symbol: &str) -> PyResult<i32> {
+    fn unsubscribe_trades(&self, symbol: &str) -> PyResult<()> {
         let contract = fpss::protocol::Contract::stock(symbol);
         self.tdx.unsubscribe_trades(&contract).map_err(to_py_err)
     }
 
     /// Unsubscribe from open interest data for a stock symbol.
-    fn unsubscribe_open_interest(&self, symbol: &str) -> PyResult<i32> {
+    fn unsubscribe_open_interest(&self, symbol: &str) -> PyResult<()> {
         let contract = fpss::protocol::Contract::stock(symbol);
         self.tdx
             .unsubscribe_open_interest(&contract)
@@ -1064,11 +1019,11 @@ impl ThetaDataDx {
     fn unsubscribe_option_quotes(
         &self,
         symbol: &str,
-        exp_date: i32,
-        is_call: bool,
-        strike: i32,
-    ) -> PyResult<i32> {
-        let contract = fpss::protocol::Contract::option(symbol, exp_date, is_call, strike);
+        exp_date: &str,
+        right: &str,
+        strike: &str,
+    ) -> PyResult<()> {
+        let contract = fpss::protocol::Contract::option(symbol, exp_date, strike, right);
         self.tdx.unsubscribe_quotes(&contract).map_err(to_py_err)
     }
 
@@ -1076,11 +1031,11 @@ impl ThetaDataDx {
     fn unsubscribe_option_trades(
         &self,
         symbol: &str,
-        exp_date: i32,
-        is_call: bool,
-        strike: i32,
-    ) -> PyResult<i32> {
-        let contract = fpss::protocol::Contract::option(symbol, exp_date, is_call, strike);
+        exp_date: &str,
+        right: &str,
+        strike: &str,
+    ) -> PyResult<()> {
+        let contract = fpss::protocol::Contract::option(symbol, exp_date, strike, right);
         self.tdx.unsubscribe_trades(&contract).map_err(to_py_err)
     }
 
@@ -1088,11 +1043,11 @@ impl ThetaDataDx {
     fn unsubscribe_option_open_interest(
         &self,
         symbol: &str,
-        exp_date: i32,
-        is_call: bool,
-        strike: i32,
-    ) -> PyResult<i32> {
-        let contract = fpss::protocol::Contract::option(symbol, exp_date, is_call, strike);
+        exp_date: &str,
+        right: &str,
+        strike: &str,
+    ) -> PyResult<()> {
+        let contract = fpss::protocol::Contract::option(symbol, exp_date, strike, right);
         self.tdx
             .unsubscribe_open_interest(&contract)
             .map_err(to_py_err)

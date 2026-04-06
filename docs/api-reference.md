@@ -604,20 +604,20 @@ Process all trades for a stock on a given date, one chunk at a time. gRPC: `GetS
 let builder = tdx.stock_history_trade_stream("AAPL", "20260401");
 builder.stream(|chunk: &[TradeTick]| {
     // process chunk
-})?;
+}).await?;
 ```
 
 ```rust
-pub fn stock_history_quote_stream(&self, symbol: &str, date: &str) -> StreamBuilder<QuoteTick>
+pub fn stock_history_quote_stream(&self, symbol: &str, date: &str, interval: &str) -> StreamBuilder<QuoteTick>
 ```
 
 Process quotes for a stock, one chunk at a time. gRPC: `GetStockHistoryQuote`
 
 ```rust
-let builder = tdx.stock_history_quote_stream("AAPL", "20260401");
+let builder = tdx.stock_history_quote_stream("AAPL", "20260401", "0");
 builder.stream(|chunk: &[QuoteTick]| {
     // process chunk
-})?;
+}).await?;
 ```
 
 ```rust
@@ -632,7 +632,7 @@ Process all trades for an option contract, one chunk at a time. gRPC: `GetOption
 let builder = tdx.option_history_trade_stream("SPY", "20261220", "500", "C", "20260401");
 builder.stream(|chunk: &[TradeTick]| {
     // process chunk
-})?;
+}).await?;
 ```
 
 ```rust
@@ -648,12 +648,36 @@ Process quotes for an option contract, one chunk at a time. gRPC: `GetOptionHist
 let builder = tdx.option_history_quote_stream("SPY", "20261220", "500", "C", "20260401", "1m");
 builder.stream(|chunk: &[QuoteTick]| {
     // process chunk
-})?;
+}).await?;
 ```
 
 ### Auth Error Behavior
 
 Nexus HTTP responses with status 401 (Unauthorized) or 404 (Not Found) are treated as `Error::Auth("invalid credentials (server returned 401/404)")`, matching the Java terminal's special-casing of these status codes. Other HTTP errors surface as `Error::Http`.
+
+### v3 Compliance: Automatic Normalizations
+
+The SDK automatically normalizes v2-style parameter values to the v3 format accepted by the MDDS server:
+
+**`normalize_right(right)`** — applied on all option endpoints via the `contract_spec!` macro:
+
+| Input | Output |
+|-------|--------|
+| `"C"` / `"c"` | `"call"` |
+| `"P"` / `"p"` | `"put"` |
+| `"*"` | `"both"` |
+| other | lowercase pass-through |
+
+**`normalize_interval(interval)`** — applied on all OHLC, quote, and price endpoints that accept an interval:
+
+| Input (ms) | Output |
+|------------|--------|
+| `"60000"` | `"1m"` |
+| `"1000"` | `"1s"` |
+| `"300000"` | `"5m"` |
+| already shorthand | pass-through |
+
+Callers can use either v2-style millisecond strings or v3 shorthand presets interchangeably.
 
 ### Endpoint Count
 
@@ -735,7 +759,7 @@ typedef struct { TdxFpssEventKind kind; TdxFpssQuote quote; TdxFpssTrade trade;
                  TdxFpssControl control; TdxFpssRawData raw_data; } TdxFpssEvent;
 ```
 
-Check `event->kind` then read the corresponding field. Only the field matching `kind` is valid. Prices are raw integers with `price_type` -- decode with `value / pow(10, priceType)`.
+Check `event->kind` then read the corresponding field. Only the field matching `kind` is valid. All prices are `f64` (double) -- decoded during parsing. No `price_type` in the public API.
 
 ### Go SDK: Streaming
 
@@ -841,16 +865,22 @@ pub enum FpssEvent {
 
 pub enum FpssData {
     Quote { contract_id: i32, ms_of_day: i32, bid_size: i32, bid_exchange: i32,
-            bid: i32, bid_condition: i32, ask_size: i32, ask_exchange: i32,
-            ask: i32, ask_condition: i32, price_type: i32, date: i32 },
+            bid: f64, bid_condition: i32, ask_size: i32,
+            ask_exchange: i32, ask: f64, ask_condition: i32,
+            date: i32, received_at_ns: u64 },
     Trade { contract_id: i32, ms_of_day: i32, sequence: i32,
             ext_condition1: i32, ext_condition2: i32, ext_condition3: i32,
             ext_condition4: i32, condition: i32, size: i32, exchange: i32,
-            price: i32, condition_flags: i32, price_flags: i32,
-            volume_type: i32, records_back: i32, price_type: i32, date: i32 },
-    OpenInterest { contract_id: i32, ms_of_day: i32, open_interest: i32, date: i32 },
-    Ohlcvc { contract_id: i32, ms_of_day: i32, open: i32, high: i32, low: i32,
-             close: i32, volume: i32, count: i32, price_type: i32, date: i32 },
+            price: f64, condition_flags: i32, price_flags: i32,
+            volume_type: i32, records_back: i32, date: i32,
+            received_at_ns: u64 },
+    OpenInterest { contract_id: i32, ms_of_day: i32, open_interest: i32,
+                   date: i32, received_at_ns: u64 },
+    Ohlcvc { contract_id: i32, ms_of_day: i32,
+             open: f64, high: f64,
+             low: f64, close: f64,
+             volume: i64, count: i64, date: i32,
+             received_at_ns: u64 },
 }
 
 pub enum FpssControl {
@@ -897,7 +927,7 @@ Constructors:
 Contract::stock("AAPL")
 Contract::index("SPX")
 Contract::rate("SOFR")
-Contract::option("SPY", 20261218, true, 60000)  // call, strike 60000
+Contract::option("SPY", "20261218", "60", "C")
 ```
 
 Serialization:
@@ -911,7 +941,7 @@ let (contract, consumed) = Contract::from_bytes(&bytes)?;  // deserialize
 
 ## Tick Types
 
-All 14 tick types are `Clone + Debug` structs generated from `endpoint_schema.toml`. Most are also `Copy` (except `OptionContract`, which contains a `String` field). Fields are typically `i32`, with `i64` for large values (e.g., `MarketValueTick.market_cap`), `f64` for Greeks/IV, and `String` for identifiers. Prices are stored in fixed-point encoding. Use the `*_price()` methods to get `Price` values with proper decimal handling.
+All 14 tick types are `Clone + Debug` structs generated from `endpoint_schema.toml`. Most are also `Copy` (except `OptionContract`, which contains a `String` field). Fields are typically `i32`, with `i64` for large values (e.g., `MarketValueTick.market_cap`), `f64` for Greeks/IV, and `String` for identifiers. All price fields are `f64` -- decoded during parsing. No `price_type` in the public API.
 
 ### Contract Identification Fields
 
@@ -922,10 +952,8 @@ All 14 tick types are `Clone + Debug` structs generated from `endpoint_schema.to
 | Field | Type (Rust/FFI) | Type (Go) | Description |
 |-------|-----------------|-----------|-------------|
 | `expiration` | `i32` | `int32` | Contract expiration date (YYYYMMDD). 0 on single-contract queries. |
-| `strike` | `i32` | `int32` | Strike price (fixed-point encoded). Use `strike_price()` for `f64`. |
+| `strike` | `i32` | `int32` | Strike price (f64, decoded at parse time). |
 | `right` | `i32` | `string` | Contract right. Rust/FFI: `67` = Call, `80` = Put, `0` = absent. Go: `"C"`, `"P"`, `""`. |
-| `right_raw` | — | `int32` | Go only: raw integer value (67/80/0) for power users. |
-| `strike_price_type` | `i32` | `int32` | Price type for decoding `strike`. |
 
 Helper methods on all 10 tick types:
 
@@ -938,7 +966,7 @@ Helper methods on all 10 tick types:
 
 Tick types with contract ID: `TradeTick`, `QuoteTick`, `OhlcTick`, `EodTick`, `OpenInterestTick`, `SnapshotTradeTick`, `TradeQuoteTick`, `MarketValueTick`, `GreeksTick`, `IvTick`.
 
-**Not** on: `CalendarDay`, `InterestRateTick`, `PriceTick`.
+**Not** on: `CalendarDay`, `InterestRateTick`, `PriceTick`, `OptionContract`. (Note: `OptionContract` contains `expiration`/`strike`/`right` as inherent fields describing the contract itself, but does not have the `strike_price()`/`is_call()`/`is_put()`/`has_contract_id()` helper methods.)
 
 ```rust
 // Wildcard query — ticks include contract identification
@@ -949,15 +977,15 @@ for t in &ticks {
         println!("{} {} strike={} price={}",
             t.expiration,
             if t.is_call() { "C" } else { "P" },
-            t.strike_price(),
-            t.get_price().to_f64());
+            t.strike,
+            t.price);
     }
 }
 ```
 
 ### TradeTick
 
-16 fields representing a single trade.
+20 fields representing a single trade (16 base + 4 contract identification).
 
 ```rust
 pub struct TradeTick {
@@ -970,17 +998,15 @@ pub struct TradeTick {
     pub condition: i32,         // Trade condition code
     pub size: i32,              // Trade size (shares)
     pub exchange: i32,          // Exchange code
-    pub price: i32,             // Price (fixed-point, use get_price())
+    pub price: f64,             // Trade price (f64, decoded)
     pub condition_flags: i32,   // Condition flags bitmap
     pub price_flags: i32,       // Price flags bitmap
     pub volume_type: i32,       // 0 = incremental, 1 = cumulative
     pub records_back: i32,      // Records back count
-    pub price_type: i32,        // Decimal type for price decoding
     pub date: i32,              // Date as YYYYMMDD integer
     pub expiration: i32,        // Contract expiration (YYYYMMDD, 0 if absent)
-    pub strike: i32,            // Contract strike (fixed-point)
+    pub strike: f64,            // Contract strike (f64, decoded)
     pub right: i32,             // C=67, P=80 (ASCII)
-    pub strike_price_type: i32, // Price type for strike decoding
 }
 ```
 
@@ -989,7 +1015,6 @@ Methods:
 | Method | Return | Description |
 |--------|--------|-------------|
 | `get_price()` | `Price` | Trade price with decimal handling |
-| `price_f64()` | `f64` | Trade price decoded to f64 |
 | `is_cancelled()` | `bool` | Condition code 40-44 |
 | `trade_condition_no_last()` | `bool` | Condition flags bit 0 |
 | `price_condition_set_last()` | `bool` | Price flags bit 0 |
@@ -1002,84 +1027,78 @@ Methods:
 
 ### QuoteTick
 
-11 fields representing an NBBO quote.
+15 fields representing an NBBO quote (11 base + 4 contract identification).
 
 ```rust
 pub struct QuoteTick {
     pub ms_of_day: i32,
     pub bid_size: i32,
     pub bid_exchange: i32,
-    pub bid: i32,
+    pub bid: f64,
     pub bid_condition: i32,
     pub ask_size: i32,
     pub ask_exchange: i32,
-    pub ask: i32,
+    pub ask: f64,
     pub ask_condition: i32,
-    pub price_type: i32,
     pub date: i32,
     pub expiration: i32,
-    pub strike: i32,
+    pub strike: f64,
     pub right: i32,
-    pub strike_price_type: i32,
 }
 ```
 
-Methods: `bid_price()`, `ask_price()`, `midpoint_value()`, `midpoint_price()`, `bid_f64()`, `ask_f64()`, `midpoint_f64()`, plus contract ID helpers.
+Methods: `is_call()`, `is_put()`, `has_contract_id()`, plus contract ID helpers.
 
 ### OhlcTick
 
 ```rust
 pub struct OhlcTick {
     pub ms_of_day: i32,
-    pub open: i32,
-    pub high: i32,
-    pub low: i32,
-    pub close: i32,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
     pub volume: i32,
     pub count: i32,
-    pub price_type: i32,
     pub date: i32,
     pub expiration: i32,
-    pub strike: i32,
+    pub strike: f64,
     pub right: i32,
-    pub strike_price_type: i32,
 }
 ```
 
-Methods: `open_price()`, `high_price()`, `low_price()`, `close_price()`, `open_f64()`, `high_f64()`, `low_f64()`, `close_f64()`, plus contract ID helpers.
+Methods: `is_call()`, `is_put()`, `has_contract_id()`, plus contract ID helpers.
 
 ### EodTick
 
-18 fields - full end-of-day snapshot with OHLC + quote data.
+22 fields - full end-of-day snapshot with OHLC + quote data (18 base + 4 contract identification).
 
 ```rust
 pub struct EodTick {
     pub ms_of_day: i32,
     pub ms_of_day2: i32,
-    pub open: i32,
-    pub high: i32,
-    pub low: i32,
-    pub close: i32,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
     pub volume: i32,
     pub count: i32,
     pub bid_size: i32,
     pub bid_exchange: i32,
-    pub bid: i32,
+    pub bid: f64,
     pub bid_condition: i32,
     pub ask_size: i32,
     pub ask_exchange: i32,
-    pub ask: i32,
+    pub ask: f64,
     pub ask_condition: i32,
-    pub price_type: i32,
     pub date: i32,
     pub expiration: i32,
-    pub strike: i32,
+    pub strike: f64,
     pub right: i32,
-    pub strike_price_type: i32,
 }
 ```
 
-Methods: `open_price()`, `high_price()`, `low_price()`, `close_price()`, `bid_price()`, `ask_price()`, `midpoint_value()`, `open_f64()`, `high_f64()`, `low_f64()`, `close_f64()`, `bid_f64()`, `ask_f64()`, plus contract ID helpers.
+Methods: `is_call()`, `is_put()`, `has_contract_id()`, plus contract ID helpers.
 
 ### OpenInterestTick
 
@@ -1089,9 +1108,8 @@ pub struct OpenInterestTick {
     pub open_interest: i32,
     pub date: i32,
     pub expiration: i32,
-    pub strike: i32,
+    pub strike: f64,
     pub right: i32,
-    pub strike_price_type: i32,
 }
 ```
 
@@ -1103,21 +1121,19 @@ pub struct SnapshotTradeTick {
     pub sequence: i32,
     pub size: i32,
     pub condition: i32,
-    pub price: i32,
-    pub price_type: i32,
+    pub price: f64,
     pub date: i32,
     pub expiration: i32,
-    pub strike: i32,
+    pub strike: f64,
     pub right: i32,
-    pub strike_price_type: i32,
 }
 ```
 
-Methods: `get_price()`, `price_f64()`, plus contract ID helpers.
+Methods: `is_call()`, `is_put()`, `has_contract_id()`, plus contract ID helpers.
 
 ### TradeQuoteTick
 
-26-field combined trade + quote tick.
+30-field combined trade + quote tick (26 base + 4 contract identification).
 
 ```rust
 pub struct TradeQuoteTick {
@@ -1131,7 +1147,7 @@ pub struct TradeQuoteTick {
     pub condition: i32,
     pub size: i32,
     pub exchange: i32,
-    pub price: i32,
+    pub price: f64,
     pub condition_flags: i32,
     pub price_flags: i32,
     pub volume_type: i32,
@@ -1140,24 +1156,21 @@ pub struct TradeQuoteTick {
     pub quote_ms_of_day: i32,
     pub bid_size: i32,
     pub bid_exchange: i32,
-    pub bid: i32,
+    pub bid: f64,
     pub bid_condition: i32,
     pub ask_size: i32,
     pub ask_exchange: i32,
-    pub ask: i32,
+    pub ask: f64,
     pub ask_condition: i32,
-    pub quote_price_type: i32,
     // Shared
-    pub price_type: i32,
     pub date: i32,
     pub expiration: i32,
-    pub strike: i32,
+    pub strike: f64,
     pub right: i32,
-    pub strike_price_type: i32,
 }
 ```
 
-Methods: `trade_price()`, `bid_price()`, `ask_price()`, `trade_price_f64()`, `bid_f64()`, `ask_f64()`, plus contract ID helpers.
+Methods: `is_call()`, `is_put()`, `has_contract_id()`, plus contract ID helpers.
 
 ### MarketValueTick
 
@@ -1171,9 +1184,8 @@ pub struct MarketValueTick {
     pub free_float: i64,
     pub date: i32,
     pub expiration: i32,
-    pub strike: i32,
+    pub strike: f64,
     pub right: i32,
-    pub strike_price_type: i32,
 }
 ```
 
@@ -1206,9 +1218,8 @@ pub struct GreeksTick {
     pub vera: f64,
     pub date: i32,
     pub expiration: i32,
-    pub strike: i32,
+    pub strike: f64,
     pub right: i32,
-    pub strike_price_type: i32,
 }
 ```
 
@@ -1221,9 +1232,8 @@ pub struct IvTick {
     pub iv_error: f64,
     pub date: i32,
     pub expiration: i32,
-    pub strike: i32,
+    pub strike: f64,
     pub right: i32,
-    pub strike_price_type: i32,
 }
 ```
 
@@ -1234,13 +1244,12 @@ pub struct IvTick {
 ```rust
 pub struct PriceTick {
     pub ms_of_day: i32,
-    pub price: i32,
-    pub price_type: i32,
+    pub price: f64,
     pub date: i32,
 }
 ```
 
-Methods: `get_price() -> Price`, `price_f64() -> f64`.
+Fields are f64 directly -- no helper methods needed.
 
 ### CalendarDay
 
@@ -1276,9 +1285,8 @@ pub struct InterestRateTick {
 pub struct OptionContract {
     pub root: String,
     pub expiration: i32,
-    pub strike: i32,
+    pub strike: f64,
     pub right: i32,
-    pub strike_price_type: i32,
 }
 ```
 
@@ -1291,7 +1299,6 @@ Fixed-point price with variable decimal precision.
 ```rust
 pub struct Price {
     pub value: i32,
-    pub price_type: i32,
 }
 ```
 
@@ -1610,15 +1617,22 @@ pub struct DirectConfig {
     pub mdds_max_message_size: usize,
     pub mdds_keepalive_secs: u64,
     pub mdds_keepalive_timeout_secs: u64,
+    pub mdds_window_size_kb: usize,             // gRPC initial stream window (default 64 KB)
+    pub mdds_connection_window_size_kb: usize,  // gRPC initial connection window (default 64 KB)
     // FPSS (TCP)
     pub fpss_hosts: Vec<(String, u16)>,
     pub fpss_timeout_ms: u64,
     pub fpss_queue_depth: usize,
+    pub fpss_ring_size: usize,                  // disruptor ring buffer slots (power of 2)
     pub fpss_ping_interval_ms: u64,
     pub fpss_connect_timeout_ms: u64,
+    pub fpss_flush_mode: FpssFlushMode,         // Batched (default) or Immediate
     // Reconnection
     pub reconnect_wait_ms: u64,
     pub reconnect_wait_rate_limited_ms: u64,
+    pub reconnect_policy: ReconnectPolicy,      // Auto (default), Manual, or Custom
+    // OHLCVC derivation
+    pub derive_ohlcvc: bool,                    // derive OHLCVC bars from trades (default true)
     // Concurrency
     pub mdds_concurrent_requests: usize,  // max in-flight gRPC requests
                                          // 0 = auto from tier (2^tier)
@@ -1627,6 +1641,33 @@ pub struct DirectConfig {
     pub tokio_worker_threads: Option<usize>,
 }
 ```
+
+### ReconnectPolicy
+
+Controls FPSS reconnection behavior after a disconnect.
+
+```rust
+pub enum ReconnectPolicy {
+    /// Auto-reconnect matching Java terminal behavior (default).
+    /// Permanent errors: no reconnect. TooManyRequests: 130s wait. All others: 2s wait.
+    /// Up to 5 consecutive reconnect attempts before giving up.
+    Auto,
+    /// No auto-reconnect. Caller monitors Disconnected events and calls reconnect_streaming().
+    Manual,
+    /// User-provided function: (reason, attempt_number) -> Option<Duration>.
+    /// Return Some(delay) to reconnect after delay, None to stop.
+    Custom(Arc<dyn Fn(RemoveReason, u32) -> Option<Duration> + Send + Sync>),
+}
+```
+
+### FpssFlushMode
+
+Controls when the FPSS write buffer is flushed.
+
+| Variant | Description |
+|---------|-------------|
+| `Batched` (default) | Flush only on PING frames (every 100ms). Matches Java terminal. Lower syscall overhead. |
+| `Immediate` | Flush after every frame write. Lowest latency, higher syscall overhead. |
 
 ### Presets
 
@@ -1665,6 +1706,38 @@ pub enum Error {
 ```
 
 All variants implement `Display` and `std::error::Error`. Automatic conversions via `From` are provided for `tonic::transport::Error`, `tonic::Status`, `reqwest::Error`, `std::io::Error`, and `rustls::Error`.
+
+### ThetaData Server Error Codes
+
+The `tdbe::errors` module defines 14 server error codes (`ThetaDataError`) extracted from gRPC response metadata (`http_status_code`). When a gRPC `Status` carries a known code, the `Error::Status` variant is enriched with the ThetaData error name and description.
+
+| Code | Name | Description |
+|------|------|-------------|
+| 200 | OK | Request completed successfully |
+| 404 | NO_IMPL | Endpoint or feature is not implemented |
+| 429 | OS_LIMIT | Rate limit exceeded for the current subscription tier |
+| 470 | GENERAL | General server-side error |
+| 471 | PERMISSION | Insufficient permissions for the requested data |
+| 472 | NO_DATA | No data available for the requested parameters |
+| 473 | INVALID_PARAMS | One or more request parameters are invalid |
+| 474 | DISCONNECTED | Client is disconnected from the server |
+| 475 | TERMINAL_PARSE | Server failed to parse the terminal request |
+| 476 | WRONG_IP | Request originated from an unauthorized IP address |
+| 477 | NO_PAGE_FOUND | The requested page was not found |
+| 478 | INVALID_SESSION_ID | The session ID is invalid or expired |
+| 571 | SERVER_STARTING | Server is still starting up; retry shortly |
+| 572 | UNCAUGHT_ERROR | An uncaught server-side error occurred |
+
+### Reference Code Counts
+
+The `tdbe` crate provides lookup tables for the following enumerated code sets:
+
+| Code Type | Count | Module | Lookup Function |
+|-----------|-------|--------|-----------------|
+| Exchange codes | 78 (0..77) | `tdbe::exchange` | `exchange_name(code)`, `exchange_symbol(code)` |
+| Trade conditions | 149 | `tdbe::conditions` | `trade_condition_name(code)` |
+| Quote conditions | 75 | `tdbe::conditions` | `quote_condition_name(code)` |
+| ThetaData server errors | 14 | `tdbe::errors` | `error_from_http_code(code)` |
 
 ---
 

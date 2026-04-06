@@ -11,7 +11,7 @@ Each SDK exposes FPSS differently:
 
 - **Rust** -- Fully synchronous callback model. Events dispatched through an LMAX Disruptor ring buffer. No Tokio on the streaming hot path.
 - **Python** -- Polling model with `next_event()`. Events returned as Python dicts with all fields.
-- **Go** -- Polling model with `NextEvent()`. Events returned as typed `*FpssEvent` structs. Price fields are pre-decoded to `float64`; raw integers available as `*Raw` fields.
+- **Go** -- Polling model with `NextEvent()`. Events returned as typed `*FpssEvent` structs. All price fields are `float64` -- decoded during parsing.
 - **C++** -- Polling model with `next_event()`. Events returned as `FpssEventPtr` (`unique_ptr<TdxFpssEvent>`, RAII). `#[repr(C)]` layout-compatible structs.
 
 ::: warning No JSON in FFI
@@ -43,10 +43,10 @@ let tdx = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
 tdx.start_streaming(|event: &FpssEvent| {
     match event {
         FpssEvent::Data(FpssData::Quote { contract_id, bid, ask, received_at_ns, .. }) => {
-            println!("Quote: contract={contract_id} bid={bid} ask={ask} rx={received_at_ns}ns");
+            println!("Quote: contract={contract_id} bid={bid:.2} ask={ask:.2} rx={received_at_ns}ns");
         }
         FpssEvent::Data(FpssData::Trade { contract_id, price, size, received_at_ns, .. }) => {
-            println!("Trade: contract={contract_id} price={price} size={size} rx={received_at_ns}ns");
+            println!("Trade: contract={contract_id} price={price:.2} size={size} rx={received_at_ns}ns");
         }
         FpssEvent::Control(FpssControl::ContractAssigned { id, contract }) => {
             println!("Contract {id} = {contract}");
@@ -98,11 +98,32 @@ tdx::FpssClient fpss(creds, config);
 | `Batched` (default) | PING frames every ~100ms | Up to 100ms | Production throughput |
 | `Immediate` | Every frame write | None | Lowest latency |
 
-```rust
+::: code-group
+```rust [Rust]
 use thetadatadx::config::FpssFlushMode;
+
 let mut config = DirectConfig::production();
 config.fpss_flush_mode = FpssFlushMode::Immediate;
+let tdx = ThetaDataDx::connect(&creds, config).await?;
 ```
+```python [Python]
+# Flush mode cannot currently be changed from the Python SDK.
+# It defaults to Batched (flush on PING frames, ~100ms).
+# Use the Rust SDK directly if you need Immediate mode.
+tdx = ThetaDataDx(creds, Config.production())
+```
+```go [Go]
+config := thetadatadx.ProductionConfig()
+config.SetFlushMode(thetadatadx.FlushModeImmediate)
+defer config.Close()
+fpss, _ := thetadatadx.NewFpssClient(creds, config)
+```
+```cpp [C++]
+auto config = tdx::Config::production();
+config.set_flush_mode(tdx::FlushMode::Immediate);
+tdx::FpssClient fpss(creds, config);
+```
+:::
 
 ## Subscribe
 
@@ -115,7 +136,7 @@ let req_id = tdx.subscribe_quotes(&Contract::stock("AAPL"))?;
 tdx.subscribe_trades(&Contract::stock("MSFT"))?;
 
 // Option quotes
-let opt = Contract::option("SPY", 20261218, true, 60000);
+let opt = Contract::option("SPY", "20261218", "60", "C");
 tdx.subscribe_quotes(&opt)?;
 
 // Open interest
@@ -156,17 +177,14 @@ tdx.start_streaming(|event: &FpssEvent| {
     match event {
         FpssEvent::Data(FpssData::Quote {
             contract_id, ms_of_day, bid, ask, bid_size, ask_size,
-            price_type, received_at_ns, ..
+            received_at_ns, ..
         }) => {
-            let bid_price = Price::new(*bid, *price_type);
-            let ask_price = Price::new(*ask, *price_type);
-            println!("Quote: id={contract_id} bid={bid_price} ask={ask_price}");
+            println!("Quote: id={contract_id} bid={bid:.2} ask={ask:.2}");
         }
         FpssEvent::Data(FpssData::Trade {
-            contract_id, price, size, price_type, sequence, received_at_ns, ..
+            contract_id, price, size, sequence, received_at_ns, ..
         }) => {
-            let trade_price = Price::new(*price, *price_type);
-            println!("Trade: id={contract_id} price={trade_price} size={size}");
+            println!("Trade: id={contract_id} price={price:.2} size={size}");
         }
         FpssEvent::Data(FpssData::OpenInterest {
             contract_id, open_interest, received_at_ns, ..
@@ -174,10 +192,11 @@ tdx.start_streaming(|event: &FpssEvent| {
             println!("OI: id={contract_id} oi={open_interest}");
         }
         FpssEvent::Data(FpssData::Ohlcvc {
-            contract_id, open, high, low, close, volume, count, received_at_ns, ..
+            contract_id, open, high, low, close,
+            volume, count, received_at_ns, ..
         }) => {
             // volume and count are i64 to avoid overflow
-            println!("OHLCVC: id={contract_id} O={open} H={high} L={low} C={close}");
+            println!("OHLCVC: id={contract_id} O={open:.2} H={high:.2} L={low:.2} C={close:.2}");
         }
         FpssEvent::Control(ctrl) => {
             println!("Control: {:?}", ctrl);
@@ -253,8 +272,9 @@ for {
 
     case thetadatadx.FpssOhlcvcEvent:
         o := event.Ohlcvc
-        fmt.Printf("OHLCVC: contract=%d vol=%d count=%d\n",
-            o.ContractID, o.Volume, o.Count)
+        // OHLC prices are pre-decoded to float64
+        fmt.Printf("OHLCVC: contract=%d O=%.4f H=%.4f L=%.4f C=%.4f vol=%d count=%d\n",
+            o.ContractID, o.Open, o.High, o.Low, o.Close, o.Volume, o.Count)
 
     case thetadatadx.FpssControlEvent:
         ctrl := event.Control
@@ -270,18 +290,18 @@ while (true) {
     switch (event->kind) {
     case TDX_FPSS_QUOTE: {
         auto& q = event->quote;
-        double bid = tdx::price_to_f64(q.bid, q.price_type);
-        double ask = tdx::price_to_f64(q.ask, q.price_type);
+        
+        
         std::cout << "Quote: contract=" << q.contract_id
-                  << " bid=" << bid << " ask=" << ask
+                  << " bid=" << q.bid << " ask=" << q.ask
                   << " rx=" << q.received_at_ns << "ns" << std::endl;
         break;
     }
     case TDX_FPSS_TRADE: {
         auto& t = event->trade;
-        double price = tdx::price_to_f64(t.price, t.price_type);
+        
         std::cout << "Trade: contract=" << t.contract_id
-                  << " price=" << price << " size=" << t.size << std::endl;
+                  << " price=" << t.price << " size=" << t.size << std::endl;
         break;
     }
     case TDX_FPSS_OPEN_INTEREST: {
@@ -293,6 +313,10 @@ while (true) {
     case TDX_FPSS_OHLCVC: {
         auto& o = event->ohlcvc;
         std::cout << "OHLCVC: contract=" << o.contract_id
+                  << " O=" << o.open
+                  << " H=" << o.high
+                  << " L=" << o.low
+                  << " C=" << o.close
                   << " vol=" << o.volume << " count=" << o.count << std::endl;
         break;
     }
@@ -326,11 +350,9 @@ tdx.start_streaming(move |event: &FpssEvent| {
         FpssEvent::Control(FpssControl::ContractAssigned { id, contract }) => {
             contracts_clone.lock().unwrap().insert(*id, contract.clone());
         }
-        FpssEvent::Data(FpssData::Quote { contract_id, bid, ask, price_type, .. }) => {
+        FpssEvent::Data(FpssData::Quote { contract_id, bid, ask, .. }) => {
             if let Some(contract) = contracts_clone.lock().unwrap().get(contract_id) {
-                let bid_price = Price::new(*bid, *price_type);
-                let ask_price = Price::new(*ask, *price_type);
-                println!("{}: bid={} ask={}", contract.root, bid_price, ask_price);
+                println!("{}: bid={bid:.2} ask={ask:.2}", contract.root);
             }
         }
         _ => {}
@@ -428,11 +450,12 @@ fpss.shutdown();
 ```
 :::
 
-## Reconnection (Rust)
+## Reconnection
 
-ThetaDataDx provides `reconnect_streaming()` for automatic reconnection with subscription recovery:
+ThetaDataDx provides reconnection with subscription recovery:
 
-```rust
+::: code-group
+```rust [Rust]
 use tdbe::types::enums::RemoveReason;
 
 match thetadatadx::fpss::reconnect_delay(reason) {
@@ -447,6 +470,39 @@ match thetadatadx::fpss::reconnect_delay(reason) {
     }
 }
 ```
+```python [Python]
+# Python does not expose reconnect_streaming() directly.
+# Reconnect by creating a new ThetaDataDx instance and re-subscribing:
+tdx.stop_streaming()
+
+tdx = ThetaDataDx(creds, Config.production())
+tdx.start_streaming()
+tdx.subscribe_quotes("AAPL")
+tdx.subscribe_trades("MSFT")
+```
+```go [Go]
+// Go does not expose reconnect_streaming() directly.
+// Reconnect by creating a new FpssClient and re-subscribing:
+fpss.Shutdown()
+fpss.Close()
+
+config := thetadatadx.ProductionConfig()
+defer config.Close()
+fpss, _ = thetadatadx.NewFpssClient(creds, config)
+fpss.SubscribeQuotes("AAPL")
+fpss.SubscribeTrades("MSFT")
+```
+```cpp [C++]
+// C++ does not expose reconnect_streaming() directly.
+// Reconnect by creating a new FpssClient and re-subscribing:
+fpss.shutdown();
+
+auto config = tdx::Config::production();
+tdx::FpssClient fpss(creds, config);
+fpss.subscribe_quotes("AAPL");
+fpss.subscribe_trades("MSFT");
+```
+:::
 
 | Category | Codes | Delay | Action |
 |----------|-------|-------|--------|
@@ -464,10 +520,10 @@ Every data event carries `received_at_ns` (wall-clock nanoseconds since UNIX epo
 
 | Event | Key Fields | Notes |
 |-------|------------|-------|
-| `Quote` | contract_id, ms_of_day, bid, ask, bid_size, ask_size, bid_exchange, ask_exchange, bid_condition, ask_condition, price_type, date, received_at_ns | 11 fields + received_at_ns |
-| `Trade` | contract_id, ms_of_day, sequence, ext_condition1-4, condition, size, exchange, price, condition_flags, price_flags, volume_type, records_back, price_type, date, received_at_ns | 16 fields + received_at_ns. Dev server sends 8-field format (handled transparently). |
+| `Quote` | contract_id, ms_of_day, bid, **bid**, ask, **ask**, bid_size, ask_size, bid_exchange, ask_exchange, bid_condition, ask_condition, date, received_at_ns | 11 FIT fields + f64 convenience fields + received_at_ns |
+| `Trade` | contract_id, ms_of_day, sequence, ext_condition1-4, condition, size, exchange, price, **price**, condition_flags, price_flags, volume_type, records_back, date, received_at_ns | 16 FIT fields + f64 convenience field + received_at_ns. Dev server sends 8-field format (handled transparently). |
 | `OpenInterest` | contract_id, ms_of_day, open_interest, date, received_at_ns | 3 fields + received_at_ns |
-| `Ohlcvc` | contract_id, ms_of_day, open, high, low, close, volume (i64), count (i64), price_type, date, received_at_ns | volume/count are i64 to avoid overflow |
+| `Ohlcvc` | contract_id, ms_of_day, open, **open**, high, **high**, low, **low**, close, **close**, volume (i64), count (i64), date, received_at_ns | volume/count are i64 to avoid overflow. f64 convenience fields pre-decoded. |
 
 ### Control Events
 
@@ -550,7 +606,7 @@ Undecoded fallback for corrupt or unrecognized frames. Fields: `code` (u8), `pay
 | `Shutdown` | `()` | Graceful shutdown |
 | `Close` | `()` | Free the FPSS handle |
 
-Helper: `PriceToF64(value int32, priceType int32) float64` -- decode raw integer prices. Note: FPSS event price fields are pre-decoded to `float64` as of v5.2; this helper is for custom use cases or raw field decoding.
+All price fields are `float64` -- access them directly.
 
 ### C++ (`tdx::FpssClient`)
 
@@ -572,7 +628,7 @@ Helper: `PriceToF64(value int32, priceType int32) float64` -- decode raw integer
 | `active_subscriptions` | `() -> std::string` | Get active subscriptions |
 | `shutdown` | `() -> void` | Graceful shutdown |
 
-Helper: `tdx::price_to_f64(int32_t value, int32_t price_type) -> double`
+All price fields are `double` (f64) -- access them directly.
 
 ## Detailed Documentation
 

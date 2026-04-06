@@ -35,7 +35,7 @@ cargo build --release -p thetadatadx-ffi
 # or libthetadatadx_ffi.dylib (macOS)
 
 # Then add the Go module:
-go get github.com/userFRM/ThetaDataDx/sdks/go
+go get github.com/userFRM/thetadatadx/sdks/go
 ```
 ```bash [C++]
 # Prerequisites: C++17 compiler, CMake 3.16+, Rust toolchain
@@ -94,8 +94,8 @@ async fn main() -> Result<(), thetadatadx::Error> {
     let eod = client.stock_history_eod("AAPL", "20240101", "20240301").await?;
     for tick in &eod {
         println!("{}: O={} H={} L={} C={} V={}",
-            tick.date, tick.open_price(), tick.high_price(),
-            tick.low_price(), tick.close_price(), tick.volume);
+            tick.date, tick.open, tick.high,
+            tick.low, tick.close, tick.volume);
     }
 
     // List option expirations
@@ -152,7 +152,7 @@ import (
     "fmt"
     "log"
 
-    thetadatadx "github.com/userFRM/ThetaDataDx/sdks/go"
+    thetadatadx "github.com/userFRM/thetadatadx/sdks/go"
 )
 
 func main() {

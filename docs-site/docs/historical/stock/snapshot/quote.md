@@ -13,31 +13,30 @@ Latest NBBO (National Best Bid and Offer) quote snapshot for one or more stocks.
 
 ::: code-group
 ```rust [Rust]
-let quotes: Vec<QuoteTick> = tdx.stock_snapshot_quote(&["AAPL", "MSFT", "GOOGL"]).await?;
-for q in &quotes {
-    println!("bid={} ask={} spread={:.4}",
-        q.bid_price(), q.ask_price(),
-        q.ask_price() - q.bid_price());
+let data = tdx.stock_snapshot_quote(&["SPY", "MSFT", "GOOGL"]).await?;
+for t in &data {
+    println!("date={} ms_of_day={} bid={:.2} bid_size={} ask={:.2} ask_size={} midpoint={:.2}",
+        t.date, t.ms_of_day, t.bid, t.bid_size, t.ask, t.ask_size, t.midpoint);
 }
 ```
 ```python [Python]
-quotes = tdx.stock_snapshot_quote(["AAPL", "MSFT", "GOOGL"])
-for q in quotes:
-    print(f"bid={q['bid']:.2f} ask={q['ask']:.2f}")
+data = tdx.stock_snapshot_quote(["SPY", "MSFT", "GOOGL"])
+for t in data:
+    print(f"date={t['date']} ms_of_day={t['ms_of_day']} bid={t['bid']:.2f} "
+          f"bid_size={t['bid_size']} ask={t['ask']:.2f} ask_size={t['ask_size']} midpoint={t['midpoint']:.2f}")
 ```
 ```go [Go]
-quotes, err := client.StockSnapshotQuote([]string{"AAPL", "MSFT", "GOOGL"})
-if err != nil {
-    log.Fatal(err)
-}
-for _, q := range quotes {
-    fmt.Printf("bid=%.2f ask=%.2f\n", q.Bid, q.Ask)
+data, _ := client.StockSnapshotQuote([]string{"SPY", "MSFT", "GOOGL"})
+for _, t := range data {
+    fmt.Printf("date=%d ms_of_day=%d bid=%.2f bid_size=%d ask=%.2f ask_size=%d midpoint=%.2f\n",
+        t.Date, t.MsOfDay, t.Bid, t.BidSize, t.Ask, t.AskSize, t.Midpoint)
 }
 ```
 ```cpp [C++]
-auto quotes = client.stock_snapshot_quote({"AAPL", "MSFT", "GOOGL"});
-for (auto& q : quotes) {
-    std::cout << "bid=" << q.bid << " ask=" << q.ask << std::endl;
+auto data = client.stock_snapshot_quote({"SPY", "MSFT", "GOOGL"});
+for (const auto& t : data) {
+    printf("date=%d ms_of_day=%d bid=%.2f bid_size=%d ask=%.2f ask_size=%d midpoint=%.2f\n",
+        t.date, t.ms_of_day, t.bid, t.bid_size, t.ask, t.ask_size, t.midpoint);
 }
 ```
 :::
@@ -76,15 +75,13 @@ for (auto& q : quotes) {
 </div>
 <div class="param">
 <div class="param-header"><code>bid</code> / <code>ask</code><span class="param-type">i32</span></div>
-<div class="param-desc">Fixed-point prices. Use <code>bid_price()</code>, <code>ask_price()</code>, <code>midpoint_price()</code> for decoded values.</div>
+<div class="param-desc">Bid/ask prices (<code>f64</code>, decoded at parse time). <code>midpoint</code> is pre-computed.</div>
 </div>
 <div class="param">
 <div class="param-header"><code>bid_condition</code> / <code>ask_condition</code><span class="param-type">i32</span></div>
 <div class="param-desc">Condition codes</div>
 </div>
 <div class="param">
-<div class="param-header"><code>price_type</code><span class="param-type">i32</span></div>
-<div class="param-desc">Decimal type for price decoding</div>
 </div>
 <div class="param">
 <div class="param-header"><code>date</code><span class="param-type">i32</span></div>
@@ -92,7 +89,6 @@ for (auto& q : quotes) {
 </div>
 </div>
 
-Helper methods: `bid_price()`, `ask_price()`, `midpoint_price()`, `midpoint_value()`
 
 
 ### Sample Response
@@ -108,4 +104,4 @@ Helper methods: `bid_price()`, `ask_price()`, `midpoint_price()`, `midpoint_valu
 
 - Accepts multiple symbols in a single call. Batch requests to reduce round-trips.
 - The NBBO represents the best bid and ask across all exchanges.
-- Use `midpoint_price()` to get the midpoint between bid and ask.
+- The `midpoint` field is pre-computed from bid and ask.

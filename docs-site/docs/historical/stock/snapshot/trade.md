@@ -13,30 +13,30 @@ Latest trade snapshot for one or more stocks. Returns the most recent trade exec
 
 ::: code-group
 ```rust [Rust]
-let trades: Vec<TradeTick> = tdx.stock_snapshot_trade(&["AAPL"]).await?;
-for t in &trades {
-    println!("price={} size={}", t.get_price(), t.size);
+let data = tdx.stock_snapshot_trade(&["SPY"]).await?;
+for t in &data {
+    println!("date={} ms_of_day={} price={:.2} size={} exchange={} condition={}",
+        t.date, t.ms_of_day, t.price, t.size, t.exchange, t.condition);
 }
 ```
 ```python [Python]
-trades = tdx.stock_snapshot_trade(["AAPL"])
-for t in trades:
-    print(f"price={t['price']:.2f} size={t['size']}")
+data = tdx.stock_snapshot_trade(["SPY"])
+for t in data:
+    print(f"date={t['date']} ms_of_day={t['ms_of_day']} price={t['price']:.2f} "
+          f"size={t['size']} exchange={t['exchange']} condition={t['condition']}")
 ```
 ```go [Go]
-trades, err := client.StockSnapshotTrade([]string{"AAPL"})
-if err != nil {
-    log.Fatal(err)
-}
-for _, t := range trades {
-    fmt.Printf("price=%.2f size=%d\n", t.Price, t.Size)
+data, _ := client.StockSnapshotTrade([]string{"SPY"})
+for _, t := range data {
+    fmt.Printf("date=%d ms_of_day=%d price=%.2f size=%d exchange=%d condition=%d\n",
+        t.Date, t.MsOfDay, t.Price, t.Size, t.Exchange, t.Condition)
 }
 ```
 ```cpp [C++]
-auto trades = client.stock_snapshot_trade({"AAPL"});
-for (auto& t : trades) {
-    std::cout << "price=" << t.price
-              << " size=" << t.size << std::endl;
+auto data = client.stock_snapshot_trade({"SPY"});
+for (const auto& t : data) {
+    printf("date=%d ms_of_day=%d price=%.2f size=%d exchange=%d condition=%d\n",
+        t.date, t.ms_of_day, t.price, t.size, t.exchange, t.condition);
 }
 ```
 :::
@@ -87,7 +87,7 @@ for (auto& t : trades) {
 </div>
 <div class="param">
 <div class="param-header"><code>price</code><span class="param-type">i32</span></div>
-<div class="param-desc">Fixed-point price. Use <code>get_price()</code> for decoded <code>f64</code>.</div>
+<div class="param-desc">Trade price (<code>f64</code>, decoded at parse time).</div>
 </div>
 <div class="param">
 <div class="param-header"><code>condition_flags</code><span class="param-type">i32</span></div>
@@ -106,8 +106,6 @@ for (auto& t : trades) {
 <div class="param-desc">Records back count</div>
 </div>
 <div class="param">
-<div class="param-header"><code>price_type</code><span class="param-type">i32</span></div>
-<div class="param-desc">Decimal type for price decoding</div>
 </div>
 <div class="param">
 <div class="param-header"><code>date</code><span class="param-type">i32</span></div>
@@ -115,7 +113,7 @@ for (auto& t : trades) {
 </div>
 </div>
 
-Helper methods: `get_price()`, `is_cancelled()`, `regular_trading_hours()`, `is_seller()`, `is_incremental_volume()`
+Helper methods: `is_cancelled()`, `regular_trading_hours()`, `is_seller()`, `is_incremental_volume()`
 
 
 ### Sample Response
@@ -130,4 +128,4 @@ Helper methods: `get_price()`, `is_cancelled()`, `regular_trading_hours()`, `is_
 ## Notes
 
 - Accepts multiple symbols in a single call.
-- Prices are stored as fixed-point integers. Use the `get_price()` helper to get the decoded float value.
+- All price fields are `f64` -- decoded during parsing.

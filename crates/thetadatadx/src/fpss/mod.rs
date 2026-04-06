@@ -33,15 +33,15 @@
 //!     // Runs on the Disruptor consumer thread -- keep it fast.
 //!     // Push to your own queue for heavy processing.
 //!     match event {
-//!         FpssEvent::Data(FpssData::Quote { contract_id, bid, ask, .. }) => { /* decoded fields */ }
-//!         FpssEvent::Data(FpssData::Trade { contract_id, price, size, .. }) => { /* decoded fields */ }
+//!         FpssEvent::Data(FpssData::Quote { contract_id, bid, ask, .. }) => { /* f64 prices */ }
+//!         FpssEvent::Data(FpssData::Trade { contract_id, price, size, .. }) => { /* f64 price */ }
 //!         FpssEvent::Control(_) => { /* lifecycle */ }
 //!         _ => {}
 //!     }
 //! })?;
 //!
 //! // Subscribe (blocking write to TLS stream via internal command channel).
-//! let req_id = client.subscribe_quotes(
+//! client.subscribe_quotes(
 //!     &thetadatadx::fpss::protocol::Contract::stock("AAPL"),
 //! )?;
 //!
@@ -93,6 +93,9 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+/// Empty symbol placeholder used when the contract_id has not been resolved yet.
+static EMPTY_SYMBOL: std::sync::LazyLock<Arc<str>> = std::sync::LazyLock::new(|| Arc::from(""));
+
 use disruptor::{build_single_producer, Producer, Sequence};
 
 use self::ring::{AdaptiveWaitStrategy, RingEvent};
@@ -116,38 +119,33 @@ use self::protocol::{
 /// Tick data events from the FPSS stream.
 ///
 /// These are the hot-path events decoded from FIT wire format and
-/// delta-decompressed. Raw integer price fields are preserved alongside
-/// pre-decoded `f64` convenience fields (e.g. `bid_f64`, `price_f64`).
-///
-/// The `f64` fields are computed via `Price::new(value, price_type).to_f64()`
-/// at decode time so callers don't have to repeat that conversion.
+/// delta-decompressed. All price fields are decoded to `f64` at parse time.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum FpssData {
-    /// Decoded quote tick (code 21). 11 FIT fields + `contract_id`.
+    /// Decoded quote tick (code 21).
     Quote {
         contract_id: i32,
+        /// Resolved symbol string (e.g. "AAPL"). Empty if contract not yet assigned.
+        symbol: Arc<str>,
         ms_of_day: i32,
         bid_size: i32,
         bid_exchange: i32,
-        bid: i32,
-        /// Pre-decoded bid price as `f64`.
-        bid_f64: f64,
+        bid: f64,
         bid_condition: i32,
         ask_size: i32,
         ask_exchange: i32,
-        ask: i32,
-        /// Pre-decoded ask price as `f64`.
-        ask_f64: f64,
+        ask: f64,
         ask_condition: i32,
-        price_type: i32,
         date: i32,
         /// Wall-clock nanoseconds since UNIX epoch, captured at frame decode time.
         received_at_ns: u64,
     },
-    /// Decoded trade tick (code 22). 16 FIT fields + `contract_id`.
+    /// Decoded trade tick (code 22).
     Trade {
         contract_id: i32,
+        /// Resolved symbol string (e.g. "AAPL"). Empty if contract not yet assigned.
+        symbol: Arc<str>,
         ms_of_day: i32,
         sequence: i32,
         ext_condition1: i32,
@@ -157,21 +155,20 @@ pub enum FpssData {
         condition: i32,
         size: i32,
         exchange: i32,
-        price: i32,
-        /// Pre-decoded trade price as `f64`.
-        price_f64: f64,
+        price: f64,
         condition_flags: i32,
         price_flags: i32,
         volume_type: i32,
         records_back: i32,
-        price_type: i32,
         date: i32,
         /// Wall-clock nanoseconds since UNIX epoch, captured at frame decode time.
         received_at_ns: u64,
     },
-    /// Decoded open interest tick (code 23). 3 FIT fields + `contract_id`.
+    /// Decoded open interest tick (code 23).
     OpenInterest {
         contract_id: i32,
+        /// Resolved symbol string (e.g. "AAPL"). Empty if contract not yet assigned.
+        symbol: Arc<str>,
         ms_of_day: i32,
         open_interest: i32,
         date: i32,
@@ -183,22 +180,15 @@ pub enum FpssData {
     /// `volume` and `count` are `i64` to avoid overflow on high-volume symbols.
     Ohlcvc {
         contract_id: i32,
+        /// Resolved symbol string (e.g. "AAPL"). Empty if contract not yet assigned.
+        symbol: Arc<str>,
         ms_of_day: i32,
-        open: i32,
-        /// Pre-decoded open price as `f64`.
-        open_f64: f64,
-        high: i32,
-        /// Pre-decoded high price as `f64`.
-        high_f64: f64,
-        low: i32,
-        /// Pre-decoded low price as `f64`.
-        low_f64: f64,
-        close: i32,
-        /// Pre-decoded close price as `f64`.
-        close_f64: f64,
+        open: f64,
+        high: f64,
+        low: f64,
+        close: f64,
         volume: i64,
         count: i64,
-        price_type: i32,
         date: i32,
         /// Wall-clock nanoseconds since UNIX epoch, captured at frame decode time.
         received_at_ns: u64,
@@ -252,8 +242,14 @@ pub enum FpssEvent {
     /// Control/lifecycle event (login, contract assignment, market open/close, etc.).
     Control(FpssControl),
     /// Raw undecoded data (fallback for payloads too short or corrupt to decode).
+    ///
+    /// Filtered from user callbacks -- only visible to internal code.
+    #[doc(hidden)]
     RawData { code: u8, payload: Vec<u8> },
     /// Placeholder default for ring buffer pre-allocation.
+    ///
+    /// Filtered from user callbacks -- only visible to internal code.
+    #[doc(hidden)]
     #[default]
     Empty,
 }
@@ -428,9 +424,10 @@ impl FpssClient {
                          try URL-encoding them."
                     );
                 }
-                return Err(Error::FpssDisconnected(format!(
-                    "server rejected login: {reason:?}"
-                )));
+                return Err(Error::Fpss {
+                    kind: crate::error::FpssErrorKind::Disconnected,
+                    message: format!("server rejected login: {reason:?}"),
+                });
             }
         };
 
@@ -444,11 +441,17 @@ impl FpssClient {
         stream
             .sock
             .set_read_timeout(Some(io_read_timeout))
-            .map_err(|e| Error::Fpss(format!("failed to set read timeout: {e}")))?;
+            .map_err(|e| Error::Fpss {
+                kind: crate::error::FpssErrorKind::ConnectionRefused,
+                message: format!("failed to set read timeout: {e}"),
+            })?;
 
         let shutdown = Arc::new(AtomicBool::new(false));
         let authenticated = Arc::new(AtomicBool::new(true));
         let contract_map = Arc::new(Mutex::new(HashMap::new()));
+        // Pre-rendered symbol strings keyed by contract ID. Populated on
+        // ContractAssigned so resolve_symbol() is zero-alloc on the hot path.
+        let symbol_cache: Arc<Mutex<HashMap<i32, Arc<str>>>> = Arc::new(Mutex::new(HashMap::new()));
 
         // Command channel: FpssClient -> I/O thread
         let (cmd_tx, cmd_rx) = std_mpsc::channel::<IoCommand>();
@@ -460,6 +463,7 @@ impl FpssClient {
         let io_shutdown = Arc::clone(&shutdown);
         let io_authenticated = Arc::clone(&authenticated);
         let io_contract_map = Arc::clone(&contract_map);
+        let io_symbol_cache = Arc::clone(&symbol_cache);
         let io_server_addr = server_addr.clone();
         let io_creds = creds.clone();
         let io_hosts = hosts.to_vec();
@@ -475,6 +479,7 @@ impl FpssClient {
                     io_shutdown,
                     io_authenticated,
                     io_contract_map,
+                    io_symbol_cache,
                     permissions,
                     io_server_addr,
                     derive_ohlcvc,
@@ -484,7 +489,10 @@ impl FpssClient {
                     io_hosts,
                 );
             })
-            .map_err(|e| Error::Fpss(format!("failed to spawn fpss-io thread: {e}")))?;
+            .map_err(|e| Error::Fpss {
+                kind: crate::error::FpssErrorKind::ConnectionRefused,
+                message: format!("failed to spawn fpss-io thread: {e}"),
+            })?;
 
         // Spawn the ping thread: sends PING command every 100ms.
         let ping_shutdown = Arc::clone(&shutdown);
@@ -495,7 +503,10 @@ impl FpssClient {
             .spawn(move || {
                 ping_loop(ping_cmd_tx, ping_shutdown, ping_authenticated);
             })
-            .map_err(|e| Error::Fpss(format!("failed to spawn fpss-ping thread: {e}")))?;
+            .map_err(|e| Error::Fpss {
+                kind: crate::error::FpssErrorKind::ConnectionRefused,
+                message: format!("failed to spawn fpss-ping thread: {e}"),
+            })?;
 
         Ok(FpssClient {
             cmd_tx,
@@ -513,8 +524,6 @@ impl FpssClient {
 
     /// Subscribe to quote data for a contract.
     ///
-    /// Returns the request ID assigned to this subscription.
-    ///
     /// # Wire protocol (from `PacketStream.addQuote()`)
     ///
     /// Sends code 21 (QUOTE) with payload `[req_id: i32 BE] [contract bytes]`.
@@ -522,7 +531,7 @@ impl FpssClient {
     /// # Errors
     ///
     /// Returns an error on network, authentication, or parsing failure.
-    pub fn subscribe_quotes(&self, contract: &Contract) -> Result<i32, Error> {
+    pub fn subscribe_quotes(&self, contract: &Contract) -> Result<(), Error> {
         self.subscribe(SubscriptionKind::Quote, contract)
     }
 
@@ -532,7 +541,7 @@ impl FpssClient {
     /// # Errors
     ///
     /// Returns an error on network, authentication, or parsing failure.
-    pub fn subscribe_trades(&self, contract: &Contract) -> Result<i32, Error> {
+    pub fn subscribe_trades(&self, contract: &Contract) -> Result<(), Error> {
         self.subscribe(SubscriptionKind::Trade, contract)
     }
 
@@ -542,8 +551,24 @@ impl FpssClient {
     /// # Errors
     ///
     /// Returns an error on network, authentication, or parsing failure.
-    pub fn subscribe_open_interest(&self, contract: &Contract) -> Result<i32, Error> {
+    pub fn subscribe_open_interest(&self, contract: &Contract) -> Result<(), Error> {
         self.subscribe(SubscriptionKind::OpenInterest, contract)
+    }
+
+    /// Subscribe to quotes + trades for a contract (convenience batch).
+    ///
+    /// **Note:** if the second subscription (trades) fails, the first (quotes)
+    /// remains active. The FPSS protocol does not support batched subscriptions,
+    /// so rollback would require an `unsubscribe` call that could itself fail.
+    /// Use individual `subscribe_quotes` / `subscribe_trades` and their
+    /// corresponding `unsubscribe` methods when you need atomic control.
+    /// # Errors
+    ///
+    /// Returns an error on network, authentication, or parsing failure.
+    pub fn subscribe_all(&self, contract: &Contract) -> Result<(), Error> {
+        self.subscribe_quotes(contract)?;
+        self.subscribe_trades(contract)?;
+        Ok(())
     }
 
     /// Subscribe to all trades for a security type (full trade stream).
@@ -575,7 +600,7 @@ impl FpssClient {
     pub fn subscribe_full_trades(
         &self,
         sec_type: tdbe::types::enums::SecType,
-    ) -> Result<i32, Error> {
+    ) -> Result<(), Error> {
         self.check_connected()?;
 
         let req_id = self.next_req_id.fetch_add(1, Ordering::Relaxed);
@@ -586,7 +611,10 @@ impl FpssClient {
                 code: StreamMsgType::Trade,
                 payload,
             })
-            .map_err(|_| Error::Fpss("I/O thread has exited".to_string()))?;
+            .map_err(|_| Error::Fpss {
+                kind: crate::error::FpssErrorKind::Disconnected,
+                message: "I/O thread has exited".to_string(),
+            })?;
 
         tracing::debug!(req_id, sec_type = ?sec_type, "sent full trade subscription");
 
@@ -599,7 +627,7 @@ impl FpssClient {
             subs.push((SubscriptionKind::Trade, sec_type));
         }
 
-        Ok(req_id)
+        Ok(())
     }
 
     /// Subscribe to all open interest data for a security type (full OI stream).
@@ -616,7 +644,7 @@ impl FpssClient {
     pub fn subscribe_full_open_interest(
         &self,
         sec_type: tdbe::types::enums::SecType,
-    ) -> Result<i32, Error> {
+    ) -> Result<(), Error> {
         self.check_connected()?;
 
         let req_id = self.next_req_id.fetch_add(1, Ordering::Relaxed);
@@ -627,7 +655,10 @@ impl FpssClient {
                 code: StreamMsgType::OpenInterest,
                 payload,
             })
-            .map_err(|_| Error::Fpss("I/O thread has exited".to_string()))?;
+            .map_err(|_| Error::Fpss {
+                kind: crate::error::FpssErrorKind::Disconnected,
+                message: "I/O thread has exited".to_string(),
+            })?;
 
         tracing::debug!(req_id, sec_type = ?sec_type, "sent full open interest subscription");
 
@@ -640,7 +671,7 @@ impl FpssClient {
             subs.push((SubscriptionKind::OpenInterest, sec_type));
         }
 
-        Ok(req_id)
+        Ok(())
     }
 
     /// Unsubscribe from all trades for a security type (full trade stream).
@@ -655,7 +686,7 @@ impl FpssClient {
     pub fn unsubscribe_full_trades(
         &self,
         sec_type: tdbe::types::enums::SecType,
-    ) -> Result<i32, Error> {
+    ) -> Result<(), Error> {
         self.check_connected()?;
 
         let req_id = self.next_req_id.fetch_add(1, Ordering::Relaxed);
@@ -666,7 +697,10 @@ impl FpssClient {
                 code: StreamMsgType::RemoveTrade,
                 payload,
             })
-            .map_err(|_| Error::Fpss("I/O thread has exited".to_string()))?;
+            .map_err(|_| Error::Fpss {
+                kind: crate::error::FpssErrorKind::Disconnected,
+                message: "I/O thread has exited".to_string(),
+            })?;
 
         // Remove from tracked subscriptions
         {
@@ -678,7 +712,7 @@ impl FpssClient {
         }
 
         tracing::debug!(req_id, sec_type = ?sec_type, "sent full trade unsubscribe");
-        Ok(req_id)
+        Ok(())
     }
 
     /// Unsubscribe from all open interest for a security type (full OI stream).
@@ -693,7 +727,7 @@ impl FpssClient {
     pub fn unsubscribe_full_open_interest(
         &self,
         sec_type: tdbe::types::enums::SecType,
-    ) -> Result<i32, Error> {
+    ) -> Result<(), Error> {
         self.check_connected()?;
 
         let req_id = self.next_req_id.fetch_add(1, Ordering::Relaxed);
@@ -704,7 +738,10 @@ impl FpssClient {
                 code: StreamMsgType::RemoveOpenInterest,
                 payload,
             })
-            .map_err(|_| Error::Fpss("I/O thread has exited".to_string()))?;
+            .map_err(|_| Error::Fpss {
+                kind: crate::error::FpssErrorKind::Disconnected,
+                message: "I/O thread has exited".to_string(),
+            })?;
 
         // Remove from tracked subscriptions
         {
@@ -716,7 +753,7 @@ impl FpssClient {
         }
 
         tracing::debug!(req_id, sec_type = ?sec_type, "sent full open interest unsubscribe");
-        Ok(req_id)
+        Ok(())
     }
 
     /// Unsubscribe from quote data for a contract.
@@ -725,7 +762,7 @@ impl FpssClient {
     /// # Errors
     ///
     /// Returns an error on network, authentication, or parsing failure.
-    pub fn unsubscribe_quotes(&self, contract: &Contract) -> Result<i32, Error> {
+    pub fn unsubscribe_quotes(&self, contract: &Contract) -> Result<(), Error> {
         self.unsubscribe(SubscriptionKind::Quote, contract)
     }
 
@@ -735,7 +772,7 @@ impl FpssClient {
     /// # Errors
     ///
     /// Returns an error on network, authentication, or parsing failure.
-    pub fn unsubscribe_trades(&self, contract: &Contract) -> Result<i32, Error> {
+    pub fn unsubscribe_trades(&self, contract: &Contract) -> Result<(), Error> {
         self.unsubscribe(SubscriptionKind::Trade, contract)
     }
 
@@ -745,12 +782,12 @@ impl FpssClient {
     /// # Errors
     ///
     /// Returns an error on network, authentication, or parsing failure.
-    pub fn unsubscribe_open_interest(&self, contract: &Contract) -> Result<i32, Error> {
+    pub fn unsubscribe_open_interest(&self, contract: &Contract) -> Result<(), Error> {
         self.unsubscribe(SubscriptionKind::OpenInterest, contract)
     }
 
     /// Internal subscribe implementation.
-    fn subscribe(&self, kind: SubscriptionKind, contract: &Contract) -> Result<i32, Error> {
+    fn subscribe(&self, kind: SubscriptionKind, contract: &Contract) -> Result<(), Error> {
         self.check_connected()?;
 
         let req_id = self.next_req_id.fetch_add(1, Ordering::Relaxed);
@@ -759,7 +796,10 @@ impl FpssClient {
 
         self.cmd_tx
             .send(IoCommand::WriteFrame { code, payload })
-            .map_err(|_| Error::Fpss("I/O thread has exited".to_string()))?;
+            .map_err(|_| Error::Fpss {
+                kind: crate::error::FpssErrorKind::Disconnected,
+                message: "I/O thread has exited".to_string(),
+            })?;
 
         // Track for reconnection
         {
@@ -776,11 +816,11 @@ impl FpssClient {
             contract = %contract,
             "sent subscription"
         );
-        Ok(req_id)
+        Ok(())
     }
 
     /// Internal unsubscribe implementation.
-    fn unsubscribe(&self, kind: SubscriptionKind, contract: &Contract) -> Result<i32, Error> {
+    fn unsubscribe(&self, kind: SubscriptionKind, contract: &Contract) -> Result<(), Error> {
         self.check_connected()?;
 
         let req_id = self.next_req_id.fetch_add(1, Ordering::Relaxed);
@@ -789,7 +829,10 @@ impl FpssClient {
 
         self.cmd_tx
             .send(IoCommand::WriteFrame { code, payload })
-            .map_err(|_| Error::Fpss("I/O thread has exited".to_string()))?;
+            .map_err(|_| Error::Fpss {
+                kind: crate::error::FpssErrorKind::Disconnected,
+                message: "I/O thread has exited".to_string(),
+            })?;
 
         // Remove from tracked subscriptions
         {
@@ -806,7 +849,7 @@ impl FpssClient {
             contract = %contract,
             "sent unsubscribe"
         );
-        Ok(req_id)
+        Ok(())
     }
 
     /// Send the STOP message and shut down background threads.
@@ -896,10 +939,16 @@ impl FpssClient {
     /// Verify connection is live before sending.
     fn check_connected(&self) -> Result<(), Error> {
         if self.shutdown.load(Ordering::Acquire) {
-            return Err(Error::Fpss("client is shut down".to_string()));
+            return Err(Error::Fpss {
+                kind: crate::error::FpssErrorKind::Disconnected,
+                message: "client is shut down".to_string(),
+            });
         }
         if !self.authenticated.load(Ordering::Acquire) {
-            return Err(Error::Fpss("not authenticated".to_string()));
+            return Err(Error::Fpss {
+                kind: crate::error::FpssErrorKind::Disconnected,
+                message: "not authenticated".to_string(),
+            });
         }
         Ok(())
     }
@@ -936,8 +985,10 @@ enum LoginResult {
 /// Source: `FPSSClient.connect()` -- reads frames until METADATA or DISCONNECTED.
 fn wait_for_login(stream: &mut connection::FpssStream) -> Result<LoginResult, Error> {
     loop {
-        let frame = read_frame(stream)?
-            .ok_or_else(|| Error::Fpss("connection closed during login handshake".to_string()))?;
+        let frame = read_frame(stream)?.ok_or_else(|| Error::Fpss {
+            kind: crate::error::FpssErrorKind::Disconnected,
+            message: "connection closed during login handshake".to_string(),
+        })?;
 
         match frame.code {
             StreamMsgType::Metadata => {
@@ -951,7 +1002,10 @@ fn wait_for_login(stream: &mut connection::FpssStream) -> Result<LoginResult, Er
             StreamMsgType::Error => {
                 let msg = String::from_utf8_lossy(&frame.payload);
                 tracing::warn!(message = %msg, "server error during login");
-                return Err(Error::Fpss(format!("server error during login: {msg}")));
+                return Err(Error::Fpss {
+                    kind: crate::error::FpssErrorKind::ConnectionRefused,
+                    message: format!("server error during login: {msg}"),
+                });
             }
             other => {
                 tracing::trace!(code = ?other, "ignoring frame during login handshake");
@@ -993,6 +1047,7 @@ fn io_loop<F>(
     shutdown: Arc<AtomicBool>,
     authenticated: Arc<AtomicBool>,
     contract_map: Arc<Mutex<HashMap<i32, Contract>>>,
+    symbol_cache: Arc<Mutex<HashMap<i32, Arc<str>>>>,
     permissions: String,
     _server_addr: String,
     derive_ohlcvc: bool,
@@ -1012,7 +1067,11 @@ fn io_loop<F>(
         .handle_events_with(
             move |ring_event: &RingEvent, _sequence: Sequence, _eob: bool| {
                 if let Some(ref evt) = ring_event.event {
-                    handler(evt);
+                    // Filter out internal-only events (Issue #185).
+                    match evt {
+                        FpssEvent::Empty | FpssEvent::RawData { .. } => {}
+                        _ => handler(evt),
+                    }
                 }
             },
         )
@@ -1062,6 +1121,7 @@ fn io_loop<F>(
                         &frame_buf[..payload_len],
                         &authenticated,
                         &contract_map,
+                        &symbol_cache,
                         &shutdown,
                         &mut delta_state,
                         derive_ohlcvc,
@@ -1658,6 +1718,7 @@ fn decode_frame(
     payload: &[u8],
     authenticated: &AtomicBool,
     contract_map: &Mutex<HashMap<i32, Contract>>,
+    symbol_cache: &Mutex<HashMap<i32, Arc<str>>>,
     shutdown: &AtomicBool,
     delta_state: &mut DeltaState,
     derive_ohlcvc: bool,
@@ -1667,6 +1728,19 @@ fn decode_frame(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos() as u64;
+
+    // Resolve contract_id to a symbol string from the pre-rendered cache.
+    // Returns Arc::clone of the cached symbol, or the empty-string sentinel.
+    // Zero allocation on the hot path -- the Arc<str> was built once in
+    // the ContractAssigned handler below.
+    let resolve_symbol = |contract_id: i32| -> Arc<str> {
+        symbol_cache
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&contract_id)
+            .map(Arc::clone)
+            .unwrap_or_else(|| Arc::clone(&EMPTY_SYMBOL))
+    };
 
     // Log a warning when ticks arrive for contract IDs not in the map,
     // but suppress for 5 seconds after STOP (market close) since stale
@@ -1698,6 +1772,13 @@ fn decode_frame(
         StreamMsgType::Contract => match parse_contract_message(payload) {
             Ok((id, contract)) => {
                 tracing::debug!(id, contract = %contract, "contract assigned");
+                // Pre-render the symbol string once and cache as Arc<str>
+                // so resolve_symbol() on the hot path is just Arc::clone.
+                let symbol_str: Arc<str> = Arc::from(contract.to_string().as_str());
+                symbol_cache
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .insert(id, symbol_str);
                 contract_map
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -1731,18 +1812,16 @@ fn decode_frame(
                     (
                         Some(FpssEvent::Data(FpssData::Quote {
                             contract_id,
+                            symbol: resolve_symbol(contract_id),
                             ms_of_day: f[0],
                             bid_size: f[1],
                             bid_exchange: f[2],
-                            bid: f[3],
-                            bid_f64: Price::new(f[3], pt).to_f64(),
+                            bid: Price::new(f[3], pt).to_f64(),
                             bid_condition: f[4],
                             ask_size: f[5],
                             ask_exchange: f[6],
-                            ask: f[7],
-                            ask_f64: Price::new(f[7], pt).to_f64(),
+                            ask: Price::new(f[7], pt).to_f64(),
                             ask_condition: f[8],
-                            price_type: pt,
                             date: f[10],
                             received_at_ns,
                         })),
@@ -1779,10 +1858,12 @@ fn decode_frame(
 
                     // 8-field: [ms_of_day, sequence, size, condition, price, exchange, price_type, date]
                     // 16-field: [ms_of_day, sequence, ext1..ext4, condition, size, exchange, price, cond_flags, price_flags, vol_type, records_back, price_type, date]
+                    let sym = resolve_symbol(contract_id);
                     let trade_event = if n_data <= 8 {
                         let pt = f[6];
                         FpssEvent::Data(FpssData::Trade {
                             contract_id,
+                            symbol: Arc::clone(&sym),
                             ms_of_day: f[0],
                             sequence: f[1],
                             ext_condition1: 0,
@@ -1792,13 +1873,11 @@ fn decode_frame(
                             condition: f[3],
                             size: f[2],
                             exchange: f[5],
-                            price: f[4],
-                            price_f64: Price::new(f[4], pt).to_f64(),
+                            price: Price::new(f[4], pt).to_f64(),
                             condition_flags: 0,
                             price_flags: 0,
                             volume_type: 0,
                             records_back: 0,
-                            price_type: pt,
                             date: f[7],
                             received_at_ns,
                         })
@@ -1806,6 +1885,7 @@ fn decode_frame(
                         let pt = f[14];
                         FpssEvent::Data(FpssData::Trade {
                             contract_id,
+                            symbol: Arc::clone(&sym),
                             ms_of_day: f[0],
                             sequence: f[1],
                             ext_condition1: f[2],
@@ -1815,13 +1895,11 @@ fn decode_frame(
                             condition: f[6],
                             size: f[7],
                             exchange: f[8],
-                            price: f[9],
-                            price_f64: Price::new(f[9], pt).to_f64(),
+                            price: Price::new(f[9], pt).to_f64(),
                             condition_flags: f[10],
                             price_flags: f[11],
                             volume_type: f[12],
                             records_back: f[13],
-                            price_type: pt,
                             date: f[15],
                             received_at_ns,
                         })
@@ -1844,18 +1922,14 @@ fn decode_frame(
                                 let apt = acc.price_type;
                                 Some(FpssEvent::Data(FpssData::Ohlcvc {
                                     contract_id,
+                                    symbol: Arc::clone(&sym),
                                     ms_of_day: acc.ms_of_day,
-                                    open: acc.open,
-                                    open_f64: Price::new(acc.open, apt).to_f64(),
-                                    high: acc.high,
-                                    high_f64: Price::new(acc.high, apt).to_f64(),
-                                    low: acc.low,
-                                    low_f64: Price::new(acc.low, apt).to_f64(),
-                                    close: acc.close,
-                                    close_f64: Price::new(acc.close, apt).to_f64(),
+                                    open: Price::new(acc.open, apt).to_f64(),
+                                    high: Price::new(acc.high, apt).to_f64(),
+                                    low: Price::new(acc.low, apt).to_f64(),
+                                    close: Price::new(acc.close, apt).to_f64(),
                                     volume: acc.volume,
                                     count: acc.count,
-                                    price_type: apt,
                                     date: acc.date,
                                     received_at_ns,
                                 }))
@@ -1892,6 +1966,7 @@ fn decode_frame(
                     (
                         Some(FpssEvent::Data(FpssData::OpenInterest {
                             contract_id,
+                            symbol: resolve_symbol(contract_id),
                             ms_of_day: f[0],
                             open_interest: f[1],
                             date: f[2],
@@ -1926,18 +2001,14 @@ fn decode_frame(
                     (
                         Some(FpssEvent::Data(FpssData::Ohlcvc {
                             contract_id,
+                            symbol: resolve_symbol(contract_id),
                             ms_of_day: f[0],
-                            open: f[1],
-                            open_f64: Price::new(f[1], pt).to_f64(),
-                            high: f[2],
-                            high_f64: Price::new(f[2], pt).to_f64(),
-                            low: f[3],
-                            low_f64: Price::new(f[3], pt).to_f64(),
-                            close: f[4],
-                            close_f64: Price::new(f[4], pt).to_f64(),
+                            open: Price::new(f[1], pt).to_f64(),
+                            high: Price::new(f[2], pt).to_f64(),
+                            low: Price::new(f[3], pt).to_f64(),
+                            close: Price::new(f[4], pt).to_f64(),
                             volume: i64::from(f[5]),
                             count: i64::from(f[6]),
-                            price_type: pt,
                             date: f[8],
                             received_at_ns,
                         })),
@@ -2160,7 +2231,10 @@ where
         client
             .cmd_tx
             .send(IoCommand::WriteFrame { code, payload })
-            .map_err(|_| Error::Fpss("I/O thread exited during reconnect".to_string()))?;
+            .map_err(|_| Error::Fpss {
+                kind: crate::error::FpssErrorKind::Disconnected,
+                message: "I/O thread exited during reconnect".to_string(),
+            })?;
 
         tracing::debug!(
             kind = ?kind,
@@ -2177,7 +2251,10 @@ where
         client
             .cmd_tx
             .send(IoCommand::WriteFrame { code, payload })
-            .map_err(|_| Error::Fpss("I/O thread exited during reconnect".to_string()))?;
+            .map_err(|_| Error::Fpss {
+                kind: crate::error::FpssErrorKind::Disconnected,
+                message: "I/O thread exited during reconnect".to_string(),
+            })?;
 
         tracing::debug!(
             kind = ?kind,
@@ -2399,6 +2476,7 @@ mod tests {
     fn fpss_event_split_data_control() {
         let data_evt = FpssEvent::Data(FpssData::Trade {
             contract_id: 42,
+            symbol: Arc::from(""),
             ms_of_day: 0,
             sequence: 0,
             ext_condition1: 0,
@@ -2408,13 +2486,11 @@ mod tests {
             condition: 0,
             size: 100,
             exchange: 0,
-            price: 15025,
-            price_f64: Price::new(15025, 8).to_f64(),
+            price: Price::new(15025, 8).to_f64(),
             condition_flags: 0,
             price_flags: 0,
             volume_type: 0,
             records_back: 0,
-            price_type: 8,
             date: 20240315,
             received_at_ns: 0,
         });
@@ -2423,7 +2499,7 @@ mod tests {
                 contract_id, price, ..
             }) => {
                 assert_eq!(*contract_id, 42);
-                assert_eq!(*price, 15025);
+                assert!((*price - 150.25).abs() < f64::EPSILON);
             }
             other => panic!("expected Data(Trade), got {other:?}"),
         }
@@ -2537,6 +2613,7 @@ mod tests {
         // Simulate the mapping from decode_frame's Trade arm:
         let trade = FpssData::Trade {
             contract_id,
+            symbol: Arc::from(""),
             ms_of_day: f[0],
             sequence: f[1],
             ext_condition1: 0,
@@ -2546,13 +2623,11 @@ mod tests {
             condition: f[3],
             size: f[2],
             exchange: f[5],
-            price: f[4],
-            price_f64: Price::new(f[4], f[6]).to_f64(),
+            price: Price::new(f[4], f[6]).to_f64(),
             condition_flags: 0,
             price_flags: 0,
             volume_type: 0,
             records_back: 0,
-            price_type: f[6],
             date: f[7],
             received_at_ns: 0,
         };
@@ -2566,7 +2641,6 @@ mod tests {
                 condition,
                 price,
                 exchange,
-                price_type,
                 date,
                 ext_condition1,
                 ext_condition2,
@@ -2583,9 +2657,8 @@ mod tests {
                 assert_eq!(sequence, 12345);
                 assert_eq!(size, 50);
                 assert_eq!(condition, 6);
-                assert_eq!(price, 5500000);
+                assert_eq!(price, Price::new(5500000, 6).to_f64());
                 assert_eq!(exchange, 57);
-                assert_eq!(price_type, 6);
                 assert_eq!(date, 20250428);
                 // 8-field trades zero out extended fields.
                 assert_eq!(ext_condition1, 0);
@@ -2667,6 +2740,7 @@ mod tests {
         assert!(n_data > 8);
         let trade = FpssData::Trade {
             contract_id,
+            symbol: Arc::from(""),
             ms_of_day: f[0],
             sequence: f[1],
             ext_condition1: f[2],
@@ -2676,13 +2750,11 @@ mod tests {
             condition: f[6],
             size: f[7],
             exchange: f[8],
-            price: f[9],
-            price_f64: Price::new(f[9], f[14]).to_f64(),
+            price: Price::new(f[9], f[14]).to_f64(),
             condition_flags: f[10],
             price_flags: f[11],
             volume_type: f[12],
             records_back: f[13],
-            price_type: f[14],
             date: f[15],
             received_at_ns: 0,
         };
@@ -2704,7 +2776,6 @@ mod tests {
                 price_flags,
                 volume_type,
                 records_back,
-                price_type,
                 date,
                 ..
             } => {
@@ -2718,12 +2789,11 @@ mod tests {
                 assert_eq!(condition, 15);
                 assert_eq!(size, 500);
                 assert_eq!(exchange, 57);
-                assert_eq!(price, 18750000);
+                assert_eq!(price, Price::new(18750000, 8).to_f64());
                 assert_eq!(condition_flags, 7);
                 assert_eq!(price_flags, 3);
                 assert_eq!(volume_type, 1);
                 assert_eq!(records_back, 0);
-                assert_eq!(price_type, 8);
                 assert_eq!(date, 20250428);
             }
             other => panic!("expected Trade, got {other:?}"),

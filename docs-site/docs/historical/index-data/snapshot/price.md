@@ -7,25 +7,33 @@ description: Latest price snapshot for one or more indices.
 
 <TierBadge tier="value" />
 
-Get the latest price snapshot for one or more index symbols. Returns the most recent price data as `Vec<PriceTick>`.
+Get the latest price snapshot for one or more index symbols.
 
 ## Code Example
 
 ::: code-group
 ```rust [Rust]
-let ticks: Vec<PriceTick> = tdx.index_snapshot_price(&["SPX", "NDX"]).await?;
+let data = tdx.index_snapshot_price(&["SPX", "NDX"]).await?;
+for t in &data {
+    println!("date={} ms_of_day={} price={:.2}", t.date, t.ms_of_day, t.price);
+}
 ```
 ```python [Python]
-price = tdx.index_snapshot_price(["SPX", "NDX"])
+data = tdx.index_snapshot_price(["SPX", "NDX"])
+for t in data:
+    print(f"date={t['date']} ms_of_day={t['ms_of_day']} price={t['price']:.2f}")
 ```
 ```go [Go]
-price, err := client.IndexSnapshotPrice([]string{"SPX"})
-if err != nil {
-    log.Fatal(err)
+data, _ := client.IndexSnapshotPrice([]string{"SPX"})
+for _, t := range data {
+    fmt.Printf("date=%d ms_of_day=%d price=%.2f\n", t.Date, t.MsOfDay, t.Price)
 }
 ```
 ```cpp [C++]
-auto price = client.index_snapshot_price({"SPX"});
+auto data = client.index_snapshot_price({"SPX"});
+for (const auto& t : data) {
+    printf("date=%d ms_of_day=%d price=%.2f\n", t.date, t.ms_of_day, t.price);
+}
 ```
 :::
 
@@ -44,7 +52,7 @@ auto price = client.index_snapshot_price({"SPX"});
 
 ## Response
 
-Returns a `Vec<PriceTick>` with price fields:
+Returns an array of PriceTick records with price fields:
 
 <div class="param-list">
 <div class="param">
@@ -76,5 +84,5 @@ Returns a `Vec<PriceTick>` with price fields:
 
 ## Notes
 
-- Returns `Vec<PriceTick>` in Rust.
+- Returns an array of PriceTick records (typed per SDK).
 - For OHLC-structured data, use [index_snapshot_ohlc](./ohlc) instead.

@@ -38,13 +38,13 @@ No-JVM ThetaData Terminal - native Rust SDK for direct market data access.
 ## Quick Start
 
 > [!TIP]
-> Create a `creds.txt` file with your ThetaData email on line 1 and password on line 2. This is the same format the Java terminal uses.
+> Credentials can be provided as a `creds.txt` file (email on line 1, password on line 2), inline via `Credentials::new("email", "password")`, or through environment variables (`THETADATA_EMAIL` / `THETADATA_PASSWORD`).
 
 ### Rust
 
 ```toml
 [dependencies]
-thetadatadx = "5.4"
+thetadatadx = "6.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -60,8 +60,8 @@ async fn main() -> Result<(), thetadatadx::Error> {
     let eod = tdx.stock_history_eod("AAPL", "20240101", "20240301").await?;
     for tick in &eod {
         println!("{}: O={} H={} L={} C={} V={}",
-            tick.date, tick.open_price(), tick.high_price(),
-            tick.low_price(), tick.close_price(), tick.volume);
+            tick.date, tick.open, tick.high,
+            tick.low, tick.close, tick.volume);
     }
     Ok(())
 }
@@ -88,23 +88,37 @@ for tick in eod:
 
 ## Streaming
 
+> [!WARNING]
+> FPSS streaming is **not yet production-ready**. The upstream FPSS server intermittently sends malformed frames under high subscription load, causing connection resets. The SDK handles this with auto-reconnect, but data gaps may occur. Historical data (MDDS) is fully production-ready.
+
 One connection, one auth. Historical available immediately, streaming connects lazily.
 
 ```rust
 use thetadatadx::fpss::{FpssData, FpssEvent};
 use thetadatadx::fpss::protocol::Contract;
 
+// Start the event loop -- handles all subscriptions
 tdx.start_streaming(|event: &FpssEvent| {
     match event {
+        FpssEvent::Data(FpssData::Quote { contract_id, bid, ask, .. }) => {
+            println!("Quote: {contract_id} bid={bid} ask={ask}");
+        }
         FpssEvent::Data(FpssData::Trade { contract_id, price, size, .. }) => {
             println!("Trade: {contract_id} @ {price} x {size}");
+        }
+        FpssEvent::Data(FpssData::Ohlcvc { contract_id, open, high, low, close, volume, .. }) => {
+            println!("OHLCVC: {contract_id} O={open} H={high} L={low} C={close} V={volume}");
         }
         _ => {}
     }
 })?;
 
+// Subscribe to quotes + trades for a symbol
 tdx.subscribe_quotes(&Contract::stock("AAPL"))?;
+tdx.subscribe_trades(&Contract::stock("AAPL"))?;
 ```
+
+All prices (`bid`, `ask`, `price`, `open`, `high`, `low`, `close`) are `f64` -- decoded during parsing. OHLCVC bars are derived from trades automatically unless disabled with `--no-ohlcvc`.
 
 ## API Coverage
 

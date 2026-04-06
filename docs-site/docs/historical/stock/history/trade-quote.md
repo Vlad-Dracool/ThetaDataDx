@@ -13,19 +13,31 @@ Combined trade + quote ticks for a stock on a given date. Each row contains the 
 
 ::: code-group
 ```rust [Rust]
-let ticks: Vec<TradeQuoteTick> = tdx.stock_history_trade_quote("AAPL", "20240315").await?;
+let data = tdx.stock_history_trade_quote("SPY", "20260315").await?;
+for t in &data {
+    println!("date={} ms_of_day={} trade_price={:.2} size={} bid={:.2} ask={:.2} exchange={}",
+        t.date, t.ms_of_day, t.trade_price, t.size, t.bid, t.ask, t.exchange);
+}
 ```
 ```python [Python]
-result = tdx.stock_history_trade_quote("AAPL", "20240315")
+data = tdx.stock_history_trade_quote("SPY", "20260315")
+for t in data:
+    print(f"date={t['date']} ms_of_day={t['ms_of_day']} trade_price={t['trade_price']:.2f} "
+          f"size={t['size']} bid={t['bid']:.2f} ask={t['ask']:.2f} exchange={t['exchange']}")
 ```
 ```go [Go]
-result, err := client.StockHistoryTradeQuote("AAPL", "20240315")
-if err != nil {
-    log.Fatal(err)
+data, _ := client.StockHistoryTradeQuote("SPY", "20260315")
+for _, t := range data {
+    fmt.Printf("date=%d ms_of_day=%d trade_price=%.2f size=%d bid=%.2f ask=%.2f exchange=%d\n",
+        t.Date, t.MsOfDay, t.TradePrice, t.Size, t.Bid, t.Ask, t.Exchange)
 }
 ```
 ```cpp [C++]
-auto tq = client.stock_history_trade_quote("AAPL", "20240315");
+auto data = client.stock_history_trade_quote("SPY", "20260315");
+for (const auto& t : data) {
+    printf("date=%d ms_of_day=%d trade_price=%.2f size=%d bid=%.2f ask=%.2f exchange=%d\n",
+        t.date, t.ms_of_day, t.trade_price, t.size, t.bid, t.ask, t.exchange);
+}
 ```
 :::
 
@@ -62,7 +74,6 @@ auto tq = client.stock_history_trade_quote("AAPL", "20240315");
 
 Combined trade + quote tick (25 fields). Contains the full trade data plus the prevailing NBBO quote at the time of the trade.
 
-Helper methods: `trade_price()`, `bid_price()`, `ask_price()`
 
 
 ### Sample Response
@@ -80,6 +91,6 @@ Helper methods: `trade_price()`, `bid_price()`, `ask_price()`
 ## Notes
 
 - This endpoint merges trade and quote streams so each trade row includes the best bid/ask at the time of execution. Useful for computing effective spread, price improvement, and trade classification.
-- Returns `Vec<TradeQuoteTick>` in Rust, list of dicts in Python, `[]TradeQuoteTick` in Go, `vector<TradeQuoteTick>` in C++.
+- Returns an array of TradeQuoteTick records (typed per SDK).
 - This is a Pro-tier endpoint. Value and Standard subscriptions do not have access.
 - The response can be very large for active symbols. Consider filtering with `start_time` / `end_time` or using date ranges that cover only the session you need.

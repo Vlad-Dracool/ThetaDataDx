@@ -15,35 +15,27 @@ The `time_of_day` parameter is milliseconds from midnight ET (e.g., `34200000` =
 
 ::: code-group
 ```rust [Rust]
-// Trade at 9:30 AM across Q1 2024
-let trades: Vec<TradeTick> = tdx.stock_at_time_trade(
-    "AAPL", "20240101", "20240301", "34200000"
-).await?;
-for t in &trades {
-    println!("{}: price={}", t.date, t.get_price());
+let data = tdx.stock_at_time_trade("SPY", "20260101", "20260301", "34200000").await?;
+for t in &data {
+    println!("date={} ms_of_day={} price={:.2} size={}",
+        t.date, t.ms_of_day, t.price, t.size);
 }
 ```
 ```python [Python]
-# Trade at 9:30 AM across Q1 2024
-trades = tdx.stock_at_time_trade("AAPL", "20240101", "20240301", "34200000")
-for t in trades:
-    print(f"{t['date']}: price={t['price']:.2f}")
+data = tdx.stock_at_time_trade("SPY", "20260101", "20260301", "34200000")
+for t in data:
+    print(f"date={t['date']} ms_of_day={t['ms_of_day']} price={t['price']:.2f} size={t['size']}")
 ```
 ```go [Go]
-// Trade at 9:30 AM across Q1 2024
-trades, err := client.StockAtTimeTrade("AAPL", "20240101", "20240301", "34200000")
-if err != nil {
-    log.Fatal(err)
-}
-for _, t := range trades {
-    fmt.Printf("%d: price=%.2f\n", t.Date, t.Price)
+data, _ := client.StockAtTimeTrade("SPY", "20260101", "20260301", "34200000")
+for _, t := range data {
+    fmt.Printf("date=%d ms_of_day=%d price=%.2f size=%d\n", t.Date, t.MsOfDay, t.Price, t.Size)
 }
 ```
 ```cpp [C++]
-// Trade at 9:30 AM across Q1 2024
-auto trades = client.stock_at_time_trade("AAPL", "20240101", "20240301", "34200000");
-for (auto& t : trades) {
-    std::cout << t.date << ": price=" << t.price << std::endl;
+auto data = client.stock_at_time_trade("SPY", "20260101", "20260301", "34200000");
+for (const auto& t : data) {
+    printf("date=%d ms_of_day=%d price=%.2f size=%d\n", t.date, t.ms_of_day, t.price, t.size);
 }
 ```
 :::
@@ -102,7 +94,7 @@ for (auto& t : trades) {
 </div>
 <div class="param">
 <div class="param-header"><code>price</code><span class="param-type">i32</span></div>
-<div class="param-desc">Fixed-point price. Use <code>get_price()</code> for decoded <code>f64</code>.</div>
+<div class="param-desc">Trade price (<code>f64</code>, decoded at parse time).</div>
 </div>
 <div class="param">
 <div class="param-header"><code>condition_flags</code><span class="param-type">i32</span></div>
@@ -121,8 +113,6 @@ for (auto& t : trades) {
 <div class="param-desc">Records back count</div>
 </div>
 <div class="param">
-<div class="param-header"><code>price_type</code><span class="param-type">i32</span></div>
-<div class="param-desc">Decimal type for price decoding</div>
 </div>
 <div class="param">
 <div class="param-header"><code>date</code><span class="param-type">i32</span></div>
@@ -130,7 +120,7 @@ for (auto& t : trades) {
 </div>
 </div>
 
-Helper methods: `get_price()`, `is_cancelled()`, `regular_trading_hours()`, `is_seller()`, `is_incremental_volume()`
+Helper methods: `is_cancelled()`, `regular_trading_hours()`, `is_seller()`, `is_incremental_volume()`
 
 ## Common Time Values
 

@@ -13,35 +13,30 @@ Latest OHLC (open-high-low-close) snapshot for one or more stocks. Returns the c
 
 ::: code-group
 ```rust [Rust]
-let bars: Vec<OhlcTick> = tdx.stock_snapshot_ohlc(&["AAPL", "MSFT"]).await?;
-for bar in &bars {
-    println!("O={} H={} L={} C={} V={}",
-        bar.open_price(), bar.high_price(),
-        bar.low_price(), bar.close_price(), bar.volume);
+let data = tdx.stock_snapshot_ohlc(&["SPY", "MSFT"]).await?;
+for t in &data {
+    println!("date={} ms_of_day={} open={:.2} high={:.2} low={:.2} close={:.2} volume={} count={}",
+        t.date, t.ms_of_day, t.open, t.high, t.low, t.close, t.volume, t.count);
 }
 ```
 ```python [Python]
-bars = tdx.stock_snapshot_ohlc(["AAPL", "MSFT"])
-for bar in bars:
-    print(f"O={bar['open']:.2f} H={bar['high']:.2f} "
-          f"L={bar['low']:.2f} C={bar['close']:.2f}")
+data = tdx.stock_snapshot_ohlc(["SPY", "MSFT"])
+for t in data:
+    print(f"date={t['date']} ms_of_day={t['ms_of_day']} open={t['open']:.2f} high={t['high']:.2f} "
+          f"low={t['low']:.2f} close={t['close']:.2f} volume={t['volume']} count={t['count']}")
 ```
 ```go [Go]
-bars, err := client.StockSnapshotOHLC([]string{"AAPL", "MSFT"})
-if err != nil {
-    log.Fatal(err)
-}
-for _, bar := range bars {
-    fmt.Printf("O=%.2f H=%.2f L=%.2f C=%.2f V=%d\n",
-        bar.Open, bar.High, bar.Low, bar.Close, bar.Volume)
+data, _ := client.StockSnapshotOHLC([]string{"SPY", "MSFT"})
+for _, t := range data {
+    fmt.Printf("date=%d ms_of_day=%d open=%.2f high=%.2f low=%.2f close=%.2f volume=%d count=%d\n",
+        t.Date, t.MsOfDay, t.Open, t.High, t.Low, t.Close, t.Volume, t.Count)
 }
 ```
 ```cpp [C++]
-auto bars = client.stock_snapshot_ohlc({"AAPL", "MSFT"});
-for (auto& bar : bars) {
-    std::cout << "O=" << bar.open << " H=" << bar.high
-              << " L=" << bar.low << " C=" << bar.close
-              << " V=" << bar.volume << std::endl;
+auto data = client.stock_snapshot_ohlc({"SPY", "MSFT"});
+for (const auto& t : data) {
+    printf("date=%d ms_of_day=%d open=%.2f high=%.2f low=%.2f close=%.2f volume=%d count=%d\n",
+        t.date, t.ms_of_day, t.open, t.high, t.low, t.close, t.volume, t.count);
 }
 ```
 :::
@@ -72,7 +67,7 @@ for (auto& bar : bars) {
 </div>
 <div class="param">
 <div class="param-header"><code>open</code> / <code>high</code> / <code>low</code> / <code>close</code><span class="param-type">i32</span></div>
-<div class="param-desc">Fixed-point OHLC prices. Use <code>open_price()</code>, <code>high_price()</code>, <code>low_price()</code>, <code>close_price()</code> for decoded values.</div>
+<div class="param-desc">OHLC prices (<code>f64</code>, decoded at parse time).</div>
 </div>
 <div class="param">
 <div class="param-header"><code>volume</code><span class="param-type">i32</span></div>
@@ -83,8 +78,6 @@ for (auto& bar : bars) {
 <div class="param-desc">Number of trades in the bar</div>
 </div>
 <div class="param">
-<div class="param-header"><code>price_type</code><span class="param-type">i32</span></div>
-<div class="param-desc">Decimal type for price decoding</div>
 </div>
 <div class="param">
 <div class="param-header"><code>date</code><span class="param-type">i32</span></div>
@@ -106,4 +99,4 @@ for (auto& bar : bars) {
 ## Notes
 
 - Accepts multiple symbols in a single call. Batch requests to reduce round-trips.
-- Prices are stored as fixed-point integers. Use the helper methods to get decoded float values.
+- All price fields are `f64` -- decoded during parsing.

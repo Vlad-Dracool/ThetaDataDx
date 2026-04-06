@@ -31,10 +31,10 @@ let tdx = ThetaDataDx::connect(&creds, DirectConfig::production()).await?;
 tdx.start_streaming(|event: &FpssEvent| {
     match event {
         FpssEvent::Data(FpssData::Quote { contract_id, bid, ask, received_at_ns, .. }) => {
-            println!("Quote: contract={contract_id} bid={bid} ask={ask} rx={received_at_ns}ns");
+            println!("Quote: contract={contract_id} bid={bid:.2} ask={ask:.2} rx={received_at_ns}ns");
         }
         FpssEvent::Data(FpssData::Trade { contract_id, price, size, received_at_ns, .. }) => {
-            println!("Trade: contract={contract_id} price={price} size={size} rx={received_at_ns}ns");
+            println!("Trade: contract={contract_id} price={price:.2} size={size} rx={received_at_ns}ns");
         }
         FpssEvent::Control(FpssControl::ContractAssigned { id, contract }) => {
             println!("Contract {id} = {contract}");
@@ -135,32 +135,69 @@ let mut config = DirectConfig::production();
 config.fpss_flush_mode = FpssFlushMode::Immediate; // lowest latency
 let tdx = ThetaDataDx::connect(&creds, config).await?;
 ```
-```toml [config.toml]
-[fpss]
-flush_mode = "immediate"  # or "batched" (default)
+```python [Python]
+# Flush mode cannot currently be changed from the Python SDK.
+# It defaults to Batched (flush on PING frames, ~100ms).
+# Use the Rust SDK directly if you need Immediate mode.
+tdx = ThetaDataDx(creds, Config.production())
+```
+```go [Go]
+config := thetadatadx.ProductionConfig()
+config.SetFlushMode(thetadatadx.FlushModeImmediate)
+defer config.Close()
+fpss, _ := thetadatadx.NewFpssClient(creds, config)
+```
+```cpp [C++]
+auto config = tdx::Config::production();
+config.set_flush_mode(tdx::FlushMode::Immediate);
+tdx::FpssClient fpss(creds, config);
 ```
 :::
 
-Flush mode is configured at the Rust level. Python, Go, and C++ inherit it from the config passed at connection time.
-
 ## Custom FPSS Hosts
 
-FPSS hosts are not hardcoded. You can override them on `DirectConfig`:
+FPSS hosts are not hardcoded. You can override them:
 
-```rust
+::: code-group
+```rust [Rust]
 let mut config = DirectConfig::production();
 config.fpss_hosts = vec![
     ("custom-host-a.example.com".to_string(), 20000),
     ("custom-host-b.example.com".to_string(), 20000),
 ];
 let tdx = ThetaDataDx::connect(&creds, config).await?;
-```
 
-Or parse from a comma-separated string (same format as `config_0.properties`):
-
-```rust
+// Or parse from a comma-separated string (same format as config_0.properties):
 let hosts = DirectConfig::parse_fpss_hosts("host-a:20000,host-b:20001")?;
 ```
+```python [Python]
+# Custom hosts are configured at the Rust level via DirectConfig or
+# TOML config file. Python inherits them from the config at connection time.
+# Set hosts in config.toml:
+#   [fpss]
+#   hosts = ["host-a.example.com:20000", "host-b.example.com:20001"]
+tdx = ThetaDataDx(creds, Config.production())
+```
+```go [Go]
+// Custom hosts are configured at the Rust level via DirectConfig or
+// TOML config file. Go inherits them from the config at connection time.
+// Set hosts in config.toml:
+//   [fpss]
+//   hosts = ["host-a.example.com:20000", "host-b.example.com:20001"]
+config := thetadatadx.ProductionConfig()
+defer config.Close()
+fpss, _ := thetadatadx.NewFpssClient(creds, config)
+```
+```cpp [C++]
+// Custom hosts are configured at the Rust level via DirectConfig or
+// TOML config file. C++ inherits them from the config at connection time.
+// Set hosts in config.toml:
+//   [fpss]
+//   hosts = ["host-a.example.com:20000", "host-b.example.com:20001"]
+auto config = tdx::Config::production();
+tdx::FpssClient fpss(creds, config);
+```
+:::
 
 Or use a TOML config file (requires `config-file` feature):
 
@@ -171,19 +208,54 @@ hosts = ["host-a.example.com:20000", "host-b.example.com:20001"]
 # hosts = "host-a.example.com:20000,host-b.example.com:20001"
 ```
 
+## Async/Sync Design
+
+ThetaDataDx uses two different concurrency models for its two data paths:
+
+| Path | Runtime | Why |
+|------|---------|-----|
+| `connect()` + all historical methods | **async** (tokio) | gRPC/tonic requires tokio for HTTP/2 multiplexing |
+| `start_streaming()` + callbacks | **sync** (OS threads) | Dedicated I/O thread + LMAX Disruptor ring buffer for lowest latency |
+
+**What this means for your code:**
+
+- You need a tokio runtime for `connect()` and any historical data call (`stock_history_eod`, etc.).
+- The streaming callback (`FnMut(&FpssEvent)`) runs on a plain OS thread -- no async executor involved. This eliminates all executor scheduling jitter from the hot path.
+- `subscribe_quotes()` and other subscription methods are synchronous -- they send a command through an internal channel to the I/O thread.
+
+```text
+tokio runtime
+  +-- connect()          async, gRPC/tonic/HTTP2
+  +-- stock_history_*()  async, gRPC streaming
+
+std::thread (fpss-io)
+  +-- TLS read loop      blocking, 50ms timeout
+  +-- Disruptor publish  lock-free, zero-alloc
+
+std::thread (fpss-ping)
+  +-- PING heartbeat     100ms sleep loop
+
+Disruptor consumer thread
+  +-- your callback(FnMut(&FpssEvent))
+```
+
+You can safely call `subscribe_*()` from any thread -- the command is sent through an `mpsc` channel and executed by the I/O thread.
+
 ## Subscribe
 
 ::: code-group
 ```rust [Rust]
 // Stock quotes
-let req_id = tdx.subscribe_quotes(&Contract::stock("AAPL"))?;
-println!("Subscribed (req_id={req_id})");
+tdx.subscribe_quotes(&Contract::stock("AAPL"))?;
 
 // Stock trades
 tdx.subscribe_trades(&Contract::stock("MSFT"))?;
 
+// Quotes + trades in one call
+tdx.subscribe_all(&Contract::stock("TSLA"))?;
+
 // Option quotes
-let opt = Contract::option("SPY", 20261218, true, 60000); // call, strike $600
+let opt = Contract::option("SPY", "20261218", "600", "C");
 tdx.subscribe_quotes(&opt)?;
 
 // Open interest
@@ -204,8 +276,7 @@ tdx.subscribe_full_open_interest("OPTION")
 ```
 ```go [Go]
 // Stock quotes
-reqID, _ := fpss.SubscribeQuotes("AAPL")
-fmt.Printf("Subscribed (req_id=%d)\n", reqID)
+_, err := fpss.SubscribeQuotes("AAPL")
 
 // Stock trades
 fpss.SubscribeTrades("MSFT")
@@ -220,9 +291,8 @@ fpss.SubscribeFullTrades("STOCK")
 fpss.SubscribeFullOpenInterest("OPTION")
 ```
 ```cpp [C++]
-// Stock quotes
-int32_t req_id = fpss.subscribe_quotes("AAPL");
-std::cout << "Subscribed (req_id=" << req_id << ")" << std::endl;
+// Stock quotes (returns 0 on success, -1 on error)
+fpss.subscribe_quotes("AAPL");
 
 // Stock trades
 fpss.subscribe_trades("MSFT");
@@ -255,11 +325,9 @@ tdx.start_streaming(move |event: &FpssEvent| {
         FpssEvent::Control(FpssControl::ContractAssigned { id, contract }) => {
             contracts_clone.lock().unwrap().insert(*id, contract.clone());
         }
-        FpssEvent::Data(FpssData::Quote { contract_id, bid, ask, price_type, .. }) => {
+        FpssEvent::Data(FpssData::Quote { contract_id, bid, ask, .. }) => {
             if let Some(contract) = contracts_clone.lock().unwrap().get(contract_id) {
-                let bid_price = Price::new(*bid, *price_type);
-                let ask_price = Price::new(*ask, *price_type);
-                println!("{}: bid={} ask={}", contract.root, bid_price, ask_price);
+                println!("{}: bid={bid:.2} ask={ask:.2}", contract.root);
             }
         }
         _ => {}

@@ -145,13 +145,13 @@ As of v1.2.0:
 | **Source** | `Greeks.java` via Apache Commons Math 3.x | `crates/tdbe/src/greeks.rs:norm_cdf()` |
 | **Rationale** | Apache Commons Math uses a continued-fraction expansion (Abramowitz & Stegun 26.2.17). The Horner-form evaluation achieves ~1e-7 accuracy with fewer multiplications and no external dependency. Both are accurate to well beyond the precision needed for Greeks computation. The Horner form is also branch-free in the core polynomial, improving throughput on modern pipelines. |
 
-### Price Type: Single Value Per Tick (Known Limitation)
+### Price Decoding: f64 at Parse Time (Intentional Improvement)
 
 | | Java | Rust | Impact |
 |---|---|---|---|
-| **Behavior** | Each `Price` cell carries its own `price_type`; Java accesses it per-column | Tick structs store a single `price_type` extracted from the designated source column | Lossy for multi-price rows |
-| **Source** | `DataValue.Price` protobuf cells | `decode.rs:row_price_type()` + `build.rs` generated parsers |
-| **Rationale** | A DataTable row may contain multiple Price-typed columns (bid, ask, last) with different `price_type` values. The flat tick struct stores only one `price_type`, extracted from the column specified by `price_source` in `endpoint_schema.toml` (typically the primary `price` column). If other Price columns in the same row use a different price type, that information is lost. In practice, all price columns in a given row use the same price type (the server uses a uniform encoding per dataset), so this limitation does not affect real-world data. |
+| **Behavior** | Each `Price` cell carries its own `price_type`; Java exposes raw integers + price_type to callers | All Price cells decoded to `f64` during parsing via `Price::new(value, price_type).to_f64()` per-cell | No `price_type` in public API |
+| **Source** | `DataValue.Price` protobuf cells | `decode.rs:row_price_f64()` + `build.rs` generated parsers |
+| **Rationale** | Each Price cell in a DataTable row is decoded individually to `f64` using its own `price_type`. This eliminates the old single-`price_type`-per-tick limitation and removes all encoding details from the public API. Users access `tick.bid`, `tick.price`, etc. as `f64` directly. The `Price` struct and `to_f64()` still exist internally in `tdbe::types::price` for the wire-level conversion. |
 
 ### Streaming Response Processing
 
@@ -168,6 +168,22 @@ As of v1.2.0:
 | **Behavior** | Single monolithic event class hierarchy | `FpssEvent` wraps `FpssData` (market data) and `FpssControl` (lifecycle) | No wire change |
 | **Source** | `FPSSClient` internal event handling | `fpss/mod.rs: FpssEvent, FpssData, FpssControl` | |
 | **Rationale** | Java handles all events through a single dispatch path. The Rust split enables exhaustive `match` on data-only events (Quote, Trade, OpenInterest, Ohlcvc) without touching lifecycle events, and vice versa. This is an intentional API improvement — the wire format is unchanged. |
+
+### FPSS Streaming Prices: f64 at Parse Time (Intentional Improvement)
+
+| | Java | Rust | Impact |
+|---|---|---|---|
+| **Behavior** | FPSS events expose raw integer prices + `price_type`; user must call `PriceCalcUtils` to decode | `FpssData` events expose `f64` prices directly (`bid`, `ask`, `price`, `open`, `high`, `low`, `close`). No `price_type` in public API. | Zero boilerplate for streaming consumers |
+| **Source** | `FPSSClient` event dispatch, `PriceCalcUtils.java` | `fpss/mod.rs`: prices decoded via `Price::new(raw, pt).to_f64()` at frame decode time |
+| **Rationale** | The Java terminal requires users to manually decode prices from every streaming event. ThetaDataDx decodes at the point where `price_type` is available (frame parsing), so the user never sees raw encoding. Same precision, same wire format, zero user-side boilerplate. |
+
+### Contract::option: Clean API (Intentional Improvement)
+
+| | Java | Rust | Impact |
+|---|---|---|---|
+| **Behavior** | `Contract(root, expDate, isCall, strike)` takes `(String, int, boolean, int)` -- expiration as raw YYYYMMDD integer, call/put as boolean, strike as wire-encoded integer (dollars * 1000) | `Contract::option(root, exp, strike, right)` takes `(&str, &str, &str, &str)` -- all strings matching the MDDS historical API | Consistent API across historical and streaming |
+| **Source** | `Contract.java` constructors | `fpss/protocol.rs: Contract::option()` |
+| **Rationale** | The Java terminal's `Contract` constructor exposes wire-format details (integer dates, boolean call/put, strike * 1000). ThetaDataDx's `Contract::option("SPY", "20260417", "550", "C")` matches the historical endpoint experience exactly. The wire encoding (`550 * 1000 = 550000`, `"C" -> is_call=true`) happens internally. `Contract::option_raw()` is available for the drop-in server which must match Java terminal wire format. |
 
 ### Unified Connection Model: Embedded Library vs Standalone Daemon
 
@@ -309,9 +325,9 @@ As of v1.2.0:
 
 | | Java | Rust/FFI | Go/Python | Impact |
 |---|---|---|---|---|
-| **Behavior** | Internal `TradeTick` stores right as integer; WebSocket JSON returns string `"C"`/`"P"` | `i32` field on all tick structs (67=Call, 80=Put, 0=absent). `right_str()` helper available. | `string` field (`"C"`, `"P"`, `""`) on all public tick structs. `RightRaw int32` available for power users. | Go/Python consumers get human-readable strings by default |
-| **Source** | Decompiled `TradeRef.java`, `DataValue` protobuf cells | `tdbe` tick structs, `right_str()` in `contract.rs` | `sdks/go/client.go:RightStr()`, conversion functions |
-| **Rationale** | The Java terminal stores right as an integer internally (matching the wire format) but converts to `"C"`/`"P"` when serializing to WebSocket JSON for end-user consumption. ThetaDataDx follows the same principle at the SDK boundary: the Rust core and FFI layer preserve the raw `i32` for zero-overhead C interop, while higher-level SDKs (Go, Python) convert to human-readable strings in the conversion layer. The `RightRaw`/`right_raw` field preserves the original integer for users who need exact wire values. |
+| **Behavior** | Internal `TradeTick` stores right as integer; WebSocket JSON returns string `"C"`/`"P"` | `i32` field on all tick structs (67=Call, 80=Put, 0=absent). `is_call()`/`is_put()` helpers available. | Go: `string` field (`"C"`, `"P"`, `""`). Python: `string` field. | Go/Python consumers get human-readable strings by default |
+| **Source** | Decompiled `TradeRef.java`, `DataValue` protobuf cells | `tdbe` tick structs, `is_call()`/`is_put()` via `impl_contract_id!` macro | `sdks/go/client.go:RightStr()`, conversion functions |
+| **Rationale** | The Java terminal stores right as an integer internally (matching the wire format) but converts to `"C"`/`"P"` when serializing to WebSocket JSON for end-user consumption. ThetaDataDx follows the same principle at the SDK boundary: the Rust core and FFI layer preserve the raw `i32` for zero-overhead C interop, while higher-level SDKs (Go, Python) convert to human-readable strings in the conversion layer. |
 
 ## v2 to v3 Automatic Normalizations
 

@@ -25,7 +25,6 @@ use sonic_rs::prelude::*;
 use tokio::sync::mpsc;
 
 use tdbe::types::enums::SecType;
-use tdbe::types::price::Price;
 use thetadatadx::fpss::protocol::Contract;
 use thetadatadx::fpss::{FpssControl, FpssData, FpssEvent};
 
@@ -199,7 +198,7 @@ async fn handle_client_message(state: &AppState, text: &str, socket: &mut WebSoc
         let is_call = right_val
             .as_str()
             .is_some_and(|r| r.eq_ignore_ascii_case("C") || r.eq_ignore_ascii_case("CALL"));
-        Contract::option(root, exp, is_call, strike)
+        Contract::option_raw(root, exp, is_call, strike)
     } else {
         Contract::stock(root)
     };
@@ -221,7 +220,7 @@ async fn handle_client_message(state: &AppState, text: &str, socket: &mut WebSoc
                 }
                 _ => {
                     tracing::warn!(req_type = %req_type, "unknown req_type for subscription");
-                    Ok(0)
+                    Ok(())
                 }
             }
         } else {
@@ -229,7 +228,7 @@ async fn handle_client_message(state: &AppState, text: &str, socket: &mut WebSoc
                 "QUOTE" => tdx.unsubscribe_quotes(&contract),
                 "TRADE" => tdx.unsubscribe_trades(&contract),
                 "OPEN_INTEREST" => tdx.unsubscribe_open_interest(&contract),
-                _ => Ok(0),
+                _ => Ok(()),
             }
         };
 
@@ -291,7 +290,6 @@ fn fpss_event_to_ws_json(
                     ask_exchange,
                     ask,
                     ask_condition,
-                    price_type,
                     date,
                     received_at_ns,
                     ..
@@ -302,11 +300,11 @@ fn fpss_event_to_ws_json(
                         "ms_of_day": ms_of_day,
                         "bid_size": bid_size,
                         "bid_exchange": bid_exchange,
-                        "bid": Price::new(*bid, *price_type).to_f64(),
+                        "bid": bid,
                         "bid_condition": bid_condition,
                         "ask_size": ask_size,
                         "ask_exchange": ask_exchange,
-                        "ask": Price::new(*ask, *price_type).to_f64(),
+                        "ask": ask,
                         "ask_condition": ask_condition,
                         "date": date,
                         "received_at_ns": received_at_ns,
@@ -320,7 +318,6 @@ fn fpss_event_to_ws_json(
                     size,
                     exchange,
                     price,
-                    price_type,
                     date,
                     received_at_ns,
                     ..
@@ -333,7 +330,7 @@ fn fpss_event_to_ws_json(
                         "condition": condition,
                         "size": size,
                         "exchange": exchange,
-                        "price": Price::new(*price, *price_type).to_f64(),
+                        "price": price,
                         "date": date,
                         "received_at_ns": received_at_ns,
                     }),
@@ -347,7 +344,6 @@ fn fpss_event_to_ws_json(
                     close,
                     volume,
                     count,
-                    price_type,
                     date,
                     received_at_ns,
                     ..
@@ -356,10 +352,10 @@ fn fpss_event_to_ws_json(
                     *contract_id,
                     sonic_rs::json!({
                         "ms_of_day": ms_of_day,
-                        "open": Price::new(*open, *price_type).to_f64(),
-                        "high": Price::new(*high, *price_type).to_f64(),
-                        "low": Price::new(*low, *price_type).to_f64(),
-                        "close": Price::new(*close, *price_type).to_f64(),
+                        "open": open,
+                        "high": high,
+                        "low": low,
+                        "close": close,
                         "volume": volume,
                         "count": count,
                         "date": date,
@@ -372,6 +368,7 @@ fn fpss_event_to_ws_json(
                     open_interest,
                     date,
                     received_at_ns,
+                    ..
                 } => (
                     "OPEN_INTEREST",
                     *contract_id,

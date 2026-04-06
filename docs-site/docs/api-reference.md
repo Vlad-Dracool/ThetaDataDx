@@ -50,7 +50,7 @@ List all available stock ticker symbols.
 
 ::: code-group
 ```rust [Rust]
-let symbols: Vec<String> = tdx.stock_list_symbols().await?;
+let symbols = tdx.stock_list_symbols().await?;
 ```
 ```python [Python]
 symbols = tdx.stock_list_symbols()
@@ -90,7 +90,7 @@ auto dates = client.stock_list_dates("TRADE", "AAPL");
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `request_type` | string | Yes | Data type: `"TRADE"`, `"TRADE"`, `"QUOTE"`, `"OHLC"` |
+| `request_type` | string | Yes | Data type: `"TRADE"`, `"QUOTE"`, `"OHLC"` |
 | `symbol` | string | Yes | Ticker symbol |
 
 **Returns:** List of date strings (`YYYYMMDD`).
@@ -209,7 +209,7 @@ auto mv = client.stock_snapshot_market_value({"AAPL"});
 | `venue` | string | No | Data venue filter |
 | `min_time` | string | No | Minimum time of day (ms from midnight) |
 
-**Returns:** `Vec<MarketValueTick>` with market cap, shares outstanding, enterprise value, book value, free float.
+**Returns:** Array of MarketValueTick records with market cap, shares outstanding, enterprise value, book value, free float.
 
 ---
 
@@ -399,7 +399,7 @@ auto tq = client.stock_history_trade_quote("AAPL", "20240315");
 | `exclusive` | bool | No | Exclusive time bounds |
 | `venue` | string | No | Data venue filter |
 
-**Returns:** `Vec<TradeQuoteTick>` with combined trade + quote fields.
+**Returns:** Array of TradeQuoteTick records with combined trade + quote fields.
 
 **Tier:** Pro
 
@@ -522,7 +522,7 @@ auto dates = client.option_list_dates("TRADE", "SPY", "20241220", "500", "C");
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `request_type` | string | Yes | Data type: `"TRADE"`, `"TRADE"`, `"QUOTE"`, etc. |
+| `request_type` | string | Yes | Data type: `"TRADE"`, `"QUOTE"`, etc. |
 | `symbol` | string | Yes | Underlying symbol |
 | `expiration` | string | Yes | Expiration date (`YYYYMMDD`) |
 | `strike` | string | Yes | Strike price (scaled integer) |
@@ -613,7 +613,7 @@ auto contracts = client.option_list_contracts("TRADE", "SPY", "20240315");
 | `date` | string | Yes | Date (`YYYYMMDD`) |
 | `max_dte` | int | No | Maximum days to expiration filter |
 
-**Returns:** `Vec<OptionContract>` with root, expiration, strike, right.
+**Returns:** Array of OptionContract records with root, expiration, strike, right.
 
 ---
 
@@ -744,7 +744,7 @@ auto oi = client.option_snapshot_open_interest("SPY", "20241220", "500", "C");
 | `strike_range` | int | No | Strike range filter |
 | `min_time` | string | No | Minimum time of day (ms from midnight) |
 
-**Returns:** `Vec<OpenInterestTick>` with ms_of_day, open_interest, date.
+**Returns:** Array of OpenInterestTick records with ms_of_day, open_interest, date.
 
 ---
 
@@ -777,7 +777,7 @@ auto mv = client.option_snapshot_market_value("SPY", "20241220", "500", "C");
 | `strike_range` | int | No | Strike range filter |
 | `min_time` | string | No | Minimum time of day (ms from midnight) |
 
-**Returns:** `Vec<MarketValueTick>` with market cap, shares outstanding, enterprise value, book value, free float.
+**Returns:** Array of MarketValueTick records with market cap, shares outstanding, enterprise value, book value, free float.
 
 ---
 
@@ -816,7 +816,7 @@ auto iv = client.option_snapshot_greeks_implied_volatility("SPY", "20241220", "5
 | `min_time` | string | No | Minimum time of day (ms from midnight) |
 | `use_market_value` | bool | No | Use market value instead of last trade |
 
-**Returns:** `Vec<IvTick>` with implied_volatility, iv_error.
+**Returns:** Array of IvTick records with implied_volatility, iv_error.
 
 **Tier:** Pro
 
@@ -857,7 +857,7 @@ auto greeks = client.option_snapshot_greeks_all("SPY", "20241220", "500", "C");
 | `min_time` | string | No | Minimum time of day |
 | `use_market_value` | bool | No | Use market value instead of last trade |
 
-**Returns:** `Vec<GreeksTick>` with all 22 Greeks.
+**Returns:** Array of GreeksTick records with all 22 Greeks.
 
 **Tier:** Pro
 
@@ -884,7 +884,7 @@ auto g = client.option_snapshot_greeks_first_order("SPY", "20241220", "500", "C"
 
 Parameters are identical to [option_snapshot_greeks_all](#option_snapshot_greeks_all).
 
-**Returns:** `Vec<GreeksTick>` with first-order Greeks (delta, theta, vega, rho).
+**Returns:** Array of GreeksTick records with first-order Greeks (delta, theta, vega, rho).
 
 **Tier:** Pro
 
@@ -911,7 +911,7 @@ auto g = client.option_snapshot_greeks_second_order("SPY", "20241220", "500", "C
 
 Parameters are identical to [option_snapshot_greeks_all](#option_snapshot_greeks_all).
 
-**Returns:** `Vec<GreeksTick>` with second-order Greeks (gamma, vanna, charm, vomma).
+**Returns:** Array of GreeksTick records with second-order Greeks (gamma, vanna, charm, vomma).
 
 **Tier:** Pro
 
@@ -938,7 +938,7 @@ auto g = client.option_snapshot_greeks_third_order("SPY", "20241220", "500", "C"
 
 Parameters are identical to [option_snapshot_greeks_all](#option_snapshot_greeks_all).
 
-**Returns:** `Vec<GreeksTick>` with third-order Greeks (speed, zomma, color, ultima).
+**Returns:** Array of GreeksTick records with third-order Greeks (speed, zomma, color, ultima).
 
 **Tier:** Pro
 
@@ -1159,7 +1159,7 @@ auto oi = client.option_history_open_interest("SPY", "20241220", "500", "C", "20
 | `max_dte` | int | No | Maximum days to expiration |
 | `strike_range` | int | No | Strike range filter |
 
-**Returns:** `Vec<OpenInterestTick>` with ms_of_day, open_interest, date.
+**Returns:** Array of OpenInterestTick records with ms_of_day, open_interest, date.
 
 ---
 
@@ -1200,7 +1200,7 @@ auto g = client.option_history_greeks_eod("SPY", "20241220", "500", "C", "202401
 | `max_dte` | int | No | Maximum days to expiration |
 | `strike_range` | int | No | Strike range filter |
 
-**Returns:** `Vec<GreeksTick>` with EOD Greeks per date.
+**Returns:** Array of GreeksTick records with EOD Greeks per date.
 
 **Tier:** Pro
 
@@ -1241,7 +1241,7 @@ auto g = client.option_history_greeks_all("SPY", "20241220", "500", "C", "202403
 | `version` | string | No | Greeks calculation version |
 | `strike_range` | int | No | Strike range filter |
 
-**Returns:** `Vec<GreeksTick>` with all 22 Greeks at each sampled point.
+**Returns:** Array of GreeksTick records with all 22 Greeks at each sampled point.
 
 **Tier:** Pro
 
@@ -1282,7 +1282,7 @@ auto g = client.option_history_trade_greeks_all("SPY", "20241220", "500", "C", "
 | `max_dte` | int | No | Maximum days to expiration |
 | `strike_range` | int | No | Strike range filter |
 
-**Returns:** `Vec<GreeksTick>` with all 22 Greeks per trade.
+**Returns:** Array of GreeksTick records with all 22 Greeks per trade.
 
 **Tier:** Pro
 
@@ -1311,7 +1311,7 @@ auto g = client.option_history_greeks_first_order("SPY", "20241220", "500", "C",
 
 Parameters are identical to [option_history_greeks_all](#option_history_greeks_all).
 
-**Returns:** `Vec<GreeksTick>` with first-order Greeks at each sampled point.
+**Returns:** Array of GreeksTick records with first-order Greeks at each sampled point.
 
 **Tier:** Pro
 
@@ -1340,7 +1340,7 @@ auto g = client.option_history_trade_greeks_first_order("SPY", "20241220", "500"
 
 Parameters are identical to [option_history_trade_greeks_all](#option_history_trade_greeks_all).
 
-**Returns:** `Vec<GreeksTick>` with first-order Greeks per trade.
+**Returns:** Array of GreeksTick records with first-order Greeks per trade.
 
 **Tier:** Pro
 
@@ -1369,7 +1369,7 @@ auto g = client.option_history_greeks_second_order("SPY", "20241220", "500", "C"
 
 Parameters are identical to [option_history_greeks_all](#option_history_greeks_all).
 
-**Returns:** `Vec<GreeksTick>` with second-order Greeks at each sampled point.
+**Returns:** Array of GreeksTick records with second-order Greeks at each sampled point.
 
 **Tier:** Pro
 
@@ -1398,7 +1398,7 @@ auto g = client.option_history_trade_greeks_second_order("SPY", "20241220", "500
 
 Parameters are identical to [option_history_trade_greeks_all](#option_history_trade_greeks_all).
 
-**Returns:** `Vec<GreeksTick>` with second-order Greeks per trade.
+**Returns:** Array of GreeksTick records with second-order Greeks per trade.
 
 **Tier:** Pro
 
@@ -1427,7 +1427,7 @@ auto g = client.option_history_greeks_third_order("SPY", "20241220", "500", "C",
 
 Parameters are identical to [option_history_greeks_all](#option_history_greeks_all).
 
-**Returns:** `Vec<GreeksTick>` with third-order Greeks at each sampled point.
+**Returns:** Array of GreeksTick records with third-order Greeks at each sampled point.
 
 **Tier:** Pro
 
@@ -1456,7 +1456,7 @@ auto g = client.option_history_trade_greeks_third_order("SPY", "20241220", "500"
 
 Parameters are identical to [option_history_trade_greeks_all](#option_history_trade_greeks_all).
 
-**Returns:** `Vec<GreeksTick>` with third-order Greeks per trade.
+**Returns:** Array of GreeksTick records with third-order Greeks per trade.
 
 **Tier:** Pro
 
@@ -1485,7 +1485,7 @@ auto iv = client.option_history_greeks_implied_volatility("SPY", "20241220", "50
 
 Parameters are identical to [option_history_greeks_all](#option_history_greeks_all).
 
-**Returns:** `Vec<IvTick>` with implied volatility at each sampled point.
+**Returns:** Array of IvTick records with implied volatility at each sampled point.
 
 **Tier:** Pro
 
@@ -1514,7 +1514,7 @@ auto iv = client.option_history_trade_greeks_implied_volatility("SPY", "20241220
 
 Parameters are identical to [option_history_trade_greeks_all](#option_history_trade_greeks_all).
 
-**Returns:** `Vec<IvTick>` with IV per trade.
+**Returns:** Array of IvTick records with IV per trade.
 
 **Tier:** Pro
 
@@ -1700,7 +1700,7 @@ auto prices = client.index_snapshot_price({"SPX"});
 | `symbols` | string[] | Yes | One or more index symbols |
 | `min_time` | string | No | Minimum time of day (ms from midnight) |
 
-**Returns:** `Vec<PriceTick>` with ms_of_day, price, date.
+**Returns:** Array of PriceTick records with ms_of_day, price, date.
 
 ---
 
@@ -1728,7 +1728,7 @@ auto mv = client.index_snapshot_market_value({"SPX"});
 | `symbols` | string[] | Yes | One or more index symbols |
 | `min_time` | string | No | Minimum time of day (ms from midnight) |
 
-**Returns:** `Vec<MarketValueTick>` with market cap, shares outstanding, enterprise value, book value, free float.
+**Returns:** Array of MarketValueTick records with market cap, shares outstanding, enterprise value, book value, free float.
 
 ---
 
@@ -1820,7 +1820,7 @@ auto prices = client.index_history_price("SPX", "20240315", "60000");
 | `start_time` | string | No | Start time (ms from midnight) |
 | `end_time` | string | No | End time (ms from midnight) |
 
-**Returns:** `Vec<PriceTick>` with price at each sampled point.
+**Returns:** Array of PriceTick records with price at each sampled point.
 
 ---
 
@@ -1850,7 +1850,7 @@ auto prices = client.index_at_time_price("SPX", "20240101", "20240301", "3420000
 | `end_date` | string | Yes | End date (`YYYYMMDD`) |
 | `time_of_day` | string | Yes | Ms from midnight ET |
 
-**Returns:** `Vec<PriceTick>` with one price per date.
+**Returns:** Array of PriceTick records with one price per date.
 
 ---
 
@@ -1877,7 +1877,7 @@ auto info = client.calendar_open_today();
 
 **Parameters:** None
 
-**Returns:** `Vec<CalendarDay>` with is_open, open_time, close_time.
+**Returns:** Array of CalendarDay records with is_open, open_time, close_time.
 
 ---
 
@@ -1904,7 +1904,7 @@ auto info = client.calendar_on_date("20240315");
 |-----------|------|----------|-------------|
 | `date` | string | Yes | Date (`YYYYMMDD`) |
 
-**Returns:** `Vec<CalendarDay>` with calendar info for the date.
+**Returns:** Array of CalendarDay records with calendar info for the date.
 
 ---
 
@@ -1931,7 +1931,7 @@ auto cal = client.calendar_year("2024");
 |-----------|------|----------|-------------|
 | `year` | string | Yes | 4-digit year (e.g. `"2024"`) |
 
-**Returns:** `Vec<CalendarDay>` with calendar info for every trading day.
+**Returns:** Array of CalendarDay records with calendar info for every trading day.
 
 ---
 
@@ -1962,7 +1962,7 @@ auto rates = client.interest_rate_history_eod("SOFR", "20240101", "20240301");
 | `start_date` | string | Yes | Start date (`YYYYMMDD`) |
 | `end_date` | string | Yes | End date (`YYYYMMDD`) |
 
-**Returns:** `Vec<InterestRateTick>` with rate per date.
+**Returns:** Array of InterestRateTick records with rate per date.
 
 ---
 
@@ -2253,11 +2253,11 @@ fpss.shutdown();
 
 Events are delivered as one of three categories:
 
-**FpssData** - Market data events:
+**FpssData** - Market data events (all variants include `received_at_ns: u64` wall-clock timestamp):
 - `Quote` - NBBO quote update (bid, ask, sizes, exchanges, conditions)
 - `Trade` - Trade execution (price, size, exchange, conditions)
 - `OpenInterest` - Open interest update
-- `Ohlcvc` - Aggregated OHLCVC bar (derived from trades via internal accumulator)
+- `Ohlcvc` - Aggregated OHLCVC bar (derived from trades via internal accumulator; `volume`/`count` are `i64` to avoid overflow on high-volume symbols)
 
 **FpssControl** - Lifecycle events:
 - `LoginSuccess` - Authentication successful (includes permissions string)
@@ -2286,17 +2286,19 @@ For historical endpoints that can return millions of rows, `_stream` variants pr
 ### stock_history_trade_stream
 
 ```rust
-tdx.stock_history_trade_stream("AAPL", "20240315", |trades: &[TradeTick]| {
-    for t in trades {
-        println!("{}: {}", t.date, t.get_price());
-    }
-}).await?;
+tdx.stock_history_trade_stream("AAPL", "20240315")
+    .stream(|trades: &[TradeTick]| {
+        for t in trades {
+            println!("{}: {}", t.date, t.price);
+        }
+    }).await?;
 ```
 
 ### stock_history_quote_stream
 
 ```rust
-tdx.stock_history_quote_stream("AAPL", "20240315", "0", |quotes: &[QuoteTick]| {
+tdx.stock_history_quote_stream("AAPL", "20240315", "0")
+    .stream(|quotes: &[QuoteTick]| {
     println!("Chunk: {} quotes", quotes.len());
 }).await?;
 ```
@@ -2304,17 +2306,19 @@ tdx.stock_history_quote_stream("AAPL", "20240315", "0", |quotes: &[QuoteTick]| {
 ### option_history_trade_stream
 
 ```rust
-tdx.option_history_trade_stream("SPY", "20241220", "500", "C", "20240315", |trades: &[TradeTick]| {
-    println!("Chunk: {} trades", trades.len());
-}).await?;
+tdx.option_history_trade_stream("SPY", "20241220", "500", "C", "20240315")
+    .stream(|trades: &[TradeTick]| {
+        println!("Chunk: {} trades", trades.len());
+    }).await?;
 ```
 
 ### option_history_quote_stream
 
 ```rust
-tdx.option_history_quote_stream("SPY", "20241220", "500", "C", "20240315", "0", |quotes: &[QuoteTick]| {
-    println!("Chunk: {} quotes", quotes.len());
-}).await?;
+tdx.option_history_quote_stream("SPY", "20241220", "500", "C", "20240315", "0")
+    .stream(|quotes: &[QuoteTick]| {
+        println!("Chunk: {} quotes", quotes.len());
+    }).await?;
 ```
 
 ---
@@ -2328,12 +2332,10 @@ tdx.option_history_quote_stream("SPY", "20241220", "500", "C", "20240315", "0", 
 | Field | Type (Rust/FFI) | Type (Go) | Description |
 |-------|-----------------|-----------|-------------|
 | `expiration` | i32 | int32 | Contract expiration (YYYYMMDD). 0 if absent. |
-| `strike` | i32 | int32 | Strike price (fixed-point). Use `strike_price()` for decoded float. |
+| `strike` | f64 | float64 | Strike price (decoded to f64). |
 | `right` | i32 | string | Contract right. Rust/FFI: 67=Call, 80=Put. Go: `"C"`, `"P"`, `""`. |
-| `right_raw` | — | int32 | Go only: raw integer value (67/80/0) for power users. |
-| `strike_price_type` | i32 | int32 | Price type for decoding `strike`. |
 
-Helper methods (all 10 types): `strike_price()`, `is_call()`, `is_put()`, `has_contract_id()`.
+Helper methods (all 10 types): `is_call()`, `is_put()`, `has_contract_id()`.
 Go helper: `RightStr(code int32) string` converts raw right codes to `"C"`/`"P"`/`""`.
 
 Types with contract ID: TradeTick, QuoteTick, OhlcTick, EodTick, OpenInterestTick, SnapshotTradeTick, TradeQuoteTick, MarketValueTick, GreeksTick, IvTick.
@@ -2350,19 +2352,17 @@ A single trade execution.
 | `condition` | i32 | Trade condition code |
 | `size` | i32 | Trade size (shares/contracts) |
 | `exchange` | i32 | Exchange code |
-| `price` | i32 | Fixed-point price (use `get_price()`) |
+| `price` | f64 | Trade price (decoded) |
 | `condition_flags` | i32 | Condition flags bitmap |
 | `price_flags` | i32 | Price flags bitmap |
 | `volume_type` | i32 | 0 = incremental, 1 = cumulative |
 | `records_back` | i32 | Records back count |
-| `price_type` | i32 | Decimal type for price decoding |
 | `date` | i32 | Date as YYYYMMDD integer |
 | `expiration` | i32 | Contract expiration (wildcard queries) |
-| `strike` | i32 | Contract strike (wildcard queries) |
+| `strike` | f64 | Contract strike (wildcard queries) |
 | `right` | i32 (Rust/FFI), string (Go) | Contract right. Rust: C=67/P=80. Go: `"C"`/`"P"`. |
-| `strike_price_type` | i32 | Strike price type (wildcard queries) |
 
-Helper methods: `get_price()`, `is_cancelled()`, `regular_trading_hours()`, `is_seller()`, `is_incremental_volume()`, `strike_price()`, `is_call()`, `is_put()`, `has_contract_id()`
+Helper methods: `is_cancelled()`, `trade_condition_no_last()`, `price_condition_set_last()`, `regular_trading_hours()`, `is_seller()`, `is_incremental_volume()`, `is_call()`, `is_put()`, `has_contract_id()`
 
 ### QuoteTick
 
@@ -2373,13 +2373,13 @@ An NBBO quote.
 | `ms_of_day` | i32 | Milliseconds since midnight ET |
 | `bid_size` / `ask_size` | i32 | Quote sizes |
 | `bid_exchange` / `ask_exchange` | i32 | Exchange codes |
-| `bid` / `ask` | i32 | Fixed-point prices |
+| `bid` / `ask` | f64 | Bid and ask prices (decoded) |
 | `bid_condition` / `ask_condition` | i32 | Condition codes |
-| `price_type` | i32 | Decimal type for price decoding |
+| `midpoint` | f64 | Pre-computed `(bid + ask) / 2.0` |
 | `date` | i32 | Date as YYYYMMDD integer |
-| `expiration` / `strike` / `right` / `strike_price_type` | i32 (Go: `right` is string) | Contract ID (wildcard queries) |
+| `expiration` / `strike` / `right` | i32/f64/i32 (Go: `right` is string) | Contract ID (wildcard queries) |
 
-Helper methods: `bid_price()`, `ask_price()`, `midpoint_price()`, `midpoint_value()`, plus contract ID helpers
+Helper methods: `is_call()`, `is_put()`, `has_contract_id()`, plus contract ID helpers
 
 ### OhlcTick
 
@@ -2388,14 +2388,13 @@ An aggregated OHLC bar.
 | Field | Type | Description |
 |-------|------|-------------|
 | `ms_of_day` | i32 | Bar start time (ms from midnight ET) |
-| `open` / `high` / `low` / `close` | i32 | Fixed-point OHLC prices |
+| `open` / `high` / `low` / `close` | f64 | OHLC prices (decoded) |
 | `volume` | i32 | Total volume in bar |
 | `count` | i32 | Number of trades in bar |
-| `price_type` | i32 | Decimal type for price decoding |
 | `date` | i32 | Date as YYYYMMDD integer |
-| `expiration` / `strike` / `right` / `strike_price_type` | i32 (Go: `right` is string) | Contract ID (wildcard queries) |
+| `expiration` / `strike` / `right` | i32/f64/i32 (Go: `right` is string) | Contract ID (wildcard queries) |
 
-Helper methods: `open_price()`, `high_price()`, `low_price()`, `close_price()`, plus contract ID helpers
+Helper methods: `is_call()`, `is_put()`, `has_contract_id()`, plus contract ID helpers
 
 ### EodTick
 
@@ -2404,24 +2403,23 @@ Full end-of-day snapshot with OHLC + closing quote data.
 | Field | Type | Description |
 |-------|------|-------------|
 | `ms_of_day` / `ms_of_day2` | i32 | Timestamps |
-| `open` / `high` / `low` / `close` | i32 | Fixed-point OHLC prices |
+| `open` / `high` / `low` / `close` | f64 | OHLC prices (decoded) |
 | `volume` | i32 | Total daily volume |
 | `count` | i32 | Total trade count |
 | `bid_size` / `ask_size` | i32 | Closing quote sizes |
 | `bid_exchange` / `ask_exchange` | i32 | Closing quote exchanges |
-| `bid` / `ask` | i32 | Closing bid/ask (fixed-point) |
+| `bid` / `ask` | f64 | Closing bid/ask (decoded) |
 | `bid_condition` / `ask_condition` | i32 | Closing quote conditions |
-| `price_type` | i32 | Decimal type |
 | `date` | i32 | Date as YYYYMMDD |
-| `expiration` / `strike` / `right` / `strike_price_type` | i32 (Go: `right` is string) | Contract ID (wildcard queries) |
+| `expiration` / `strike` / `right` | i32/f64/i32 (Go: `right` is string) | Contract ID (wildcard queries) |
 
-Helper methods: `open_price()`, `high_price()`, `low_price()`, `close_price()`, `bid_price()`, `ask_price()`, `midpoint_value()`, plus contract ID helpers
+Helper methods: `is_call()`, `is_put()`, `has_contract_id()`, plus contract ID helpers
 
 ### TradeQuoteTick
 
 Combined trade + quote tick. Contains the full trade data plus the prevailing NBBO quote at the time of the trade.
 
-Helper methods: `trade_price()`, `bid_price()`, `ask_price()`, plus contract ID helpers
+Helper methods: `is_call()`, `is_put()`, `has_contract_id()`, plus contract ID helpers
 
 ### OpenInterestTick
 
@@ -2430,7 +2428,7 @@ Helper methods: `trade_price()`, `bid_price()`, `ask_price()`, plus contract ID 
 | `ms_of_day` | i32 | Milliseconds since midnight ET |
 | `open_interest` | i32 | Open interest count |
 | `date` | i32 | Date as YYYYMMDD |
-| `expiration` / `strike` / `right` / `strike_price_type` | i32 (Go: `right` is string) | Contract ID (wildcard queries) |
+| `expiration` / `strike` / `right` | i32/f64/i32 (Go: `right` is string) | Contract ID (wildcard queries) |
 
 ### GreeksResult
 
@@ -2463,24 +2461,7 @@ Result of `all_greeks()`. All fields are `f64`.
 
 ### Price
 
-Fixed-point price with variable decimal precision.
-
-```
-real_price = value * 10^(price_type - 10)
-```
-
-| price_type | Multiplier | Example |
-|------------|------------|---------|
-| 0 | Zero | `(0, 0)` = `0.0` |
-| 6 | 0.0001 | `(1502500, 6)` = `150.2500` |
-| 7 | 0.001 | `(5, 7)` = `0.005` |
-| 8 | 0.01 | `(15025, 8)` = `150.25` |
-| 10 | 1.0 | `(100, 10)` = `100.0` |
-| 12 | 100.0 | `(5, 12)` = `500.0` |
-
-Methods: `to_f64()`, `is_zero()`, `Display` (formats with correct decimals)
-
-Prices with different `price_type` values can be compared directly - they are normalized internally.
+All public tick fields are `f64`, decoded at parse time. No price_type conversion is needed in user code.
 
 ### SecType
 
@@ -2498,7 +2479,7 @@ Option right: `Call`, `Put`
 - `from_char('C')` / `from_char('P')` - parse from character
 - `as_char()` - convert to `'C'` or `'P'`
 
-**Go SDK:** The `Right` field on all public tick structs is a `string` (`"C"`, `"P"`, or `""`) instead of `i32`. The raw integer value is available as `RightRaw`. Use `RightStr(code int32)` for manual conversion.
+**Go SDK:** The `Right` field on all public tick structs is a `string` (`"C"`, `"P"`, or `""`) instead of `i32`. Use `RightStr(code int32)` for manual conversion.
 
 ### StreamResponseType
 
@@ -2535,7 +2516,7 @@ Identifies a security for streaming subscriptions.
 Contract::stock("AAPL")
 Contract::index("SPX")
 Contract::rate("SOFR")
-Contract::option("SPY", 20261218, true, 60000)  // call, strike 60000
+Contract::option("SPY", "20261218", "60", "C")
 ```
 ```python [Python]
 # Passed as string symbol to subscribe methods
@@ -2557,7 +2538,7 @@ fpss.subscribe_quotes("AAPL");
 | `sec_type` | SecType | Security type |
 | `exp_date` | int (optional) | Expiration date as YYYYMMDD (options only) |
 | `is_call` | bool (optional) | true = call, false = put (options only) |
-| `strike` | int (optional) | Strike price as scaled integer (options only) |
+| `strike` | string (optional) | Strike price in dollars (options only) |
 
 ### Credentials
 
@@ -2586,10 +2567,19 @@ auto creds = tdx::Credentials::from_email("email@example.com", "password");
 ::: code-group
 ```rust [Rust]
 pub enum Error {
-    Auth(String),          // Invalid credentials (401/404)
-    Http(String),          // Network or server issue
-    Grpc(tonic::Status),   // gRPC transport error
-    NoData,                // Symbol does not exist
+    Transport(tonic::transport::Error), // gRPC channel errors
+    Status(Box<tonic::Status>),         // gRPC status codes (enriched with ThetaData error info)
+    Decompress(String),                 // zstd decompression failure
+    Decode(String),                     // protobuf decode failure
+    NoData,                             // endpoint returned no usable data
+    Auth(String),                       // Nexus auth errors (401/404)
+    Fpss(String),                       // FPSS connection errors
+    FpssProtocol(String),               // FPSS wire protocol errors
+    FpssDisconnected(String),           // FPSS server rejected connection
+    Config(String),                     // configuration errors
+    Http(reqwest::Error),               // HTTP request errors
+    Io(std::io::Error),                 // I/O errors
+    Tls(rustls::Error),                 // TLS handshake errors
 }
 ```
 ```python [Python]

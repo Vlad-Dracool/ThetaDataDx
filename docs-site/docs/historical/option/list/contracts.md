@@ -13,16 +13,30 @@ List all option contracts available for a given underlying symbol on a specific 
 
 ::: code-group
 ```rust [Rust]
-let contracts: Vec<OptionContract> = tdx.option_list_contracts("TRADE", "SPY", "20240315").await?;
+let data = tdx.option_list_contracts("TRADE", "SPY", "20260402").await?;
+for t in &data {
+    println!("symbol={} expiration={} strike={:.2} right={}",
+        t.root, t.expiration, t.strike, t.right);
+}
 ```
 ```python [Python]
-contracts = tdx.option_list_contracts("TRADE", "SPY", "20240315")
+data = tdx.option_list_contracts("TRADE", "SPY", "20260402")
+for t in data:
+    print(f"symbol={t['root']} expiration={t['expiration']} strike={t['strike']:.2f} right={t['right']}")
 ```
 ```go [Go]
-contracts, err := client.OptionListContracts("TRADE", "SPY", "20240315")
+data, _ := client.OptionListContracts("TRADE", "SPY", "20260402")
+for _, t := range data {
+    fmt.Printf("symbol=%s expiration=%d strike=%.2f right=%s\n",
+        t.Root, t.Expiration, t.Strike, t.Right)
+}
 ```
 ```cpp [C++]
-auto contracts = client.option_list_contracts("TRADE", "SPY", "20240315");
+auto data = client.option_list_contracts("TRADE", "SPY", "20260402");
+for (const auto& t : data) {
+    printf("symbol=%s expiration=%d strike=%.2f right=%s\n",
+        t.root, t.expiration, t.strike, t.right);
+}
 ```
 :::
 
@@ -73,9 +87,9 @@ auto contracts = client.option_list_contracts("TRADE", "SPY", "20240315");
 
 ```json
 [
-  {"symbol": "SPY", "expiration": 20260403, "strike": 320.00, "right": "C"},
-  {"symbol": "SPY", "expiration": 20260403, "strike": 640.00, "right": "C"},
-  {"symbol": "SPY", "expiration": 20260417, "strike": 550.00, "right": "P"}
+  {"root": "SPY", "expiration": 20260403, "strike": 320.00, "right": "C"},
+  {"root": "SPY", "expiration": 20260403, "strike": 640.00, "right": "C"},
+  {"root": "SPY", "expiration": 20260417, "strike": 550.00, "right": "P"}
 ]
 ```
 

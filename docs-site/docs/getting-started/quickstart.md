@@ -25,8 +25,8 @@ async fn main() -> Result<(), thetadatadx::Error> {
     let eod = client.stock_history_eod("AAPL", "20240101", "20240301").await?;
     for tick in &eod {
         println!("{}: O={} H={} L={} C={} V={}",
-            tick.date, tick.open_price(), tick.high_price(),
-            tick.low_price(), tick.close_price(), tick.volume);
+            tick.date, tick.open, tick.high,
+            tick.low, tick.close, tick.volume);
     }
 
     // List option expirations
@@ -82,7 +82,7 @@ import (
     "fmt"
     "log"
 
-    thetadatadx "github.com/userFRM/ThetaDataDx/sdks/go"
+    thetadatadx "github.com/userFRM/thetadatadx/sdks/go"
 )
 
 func main() {
@@ -159,7 +159,7 @@ int main() {
 ]
 ```
 
-> SPY end-of-day data. Prices shown as f64 (decoded from fixed-point). All endpoints return structured data with the same JSON-like shape across SDKs.
+> SPY end-of-day data. All prices are `f64`. All endpoints return structured data with the same JSON-like shape across SDKs.
 
 ## With pandas DataFrames (Python)
 
