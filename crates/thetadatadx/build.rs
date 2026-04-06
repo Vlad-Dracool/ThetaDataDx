@@ -105,7 +105,8 @@ fn generate_parser(out: &mut String, type_name: &str, def: &TickTypeDef) {
 
     // ==================== UNIVERSAL DEBUG FOR ALL TABLES ====================
     // Prints real headers + raw rows for ANY endpoint when TDX_DEBUG_HEADERS=1
-    out.push_str("    if std::env::var_os(\"TDX_DEBUG_HEADERS\").is_some() {\n");
+    // Change this line in your generator:
+    out.push_str("    if std::env::var(\"TDX_DEBUG_HEADERS\").map(|v| v == \"1\").unwrap_or(false) {\n");
     out.push_str(&format!(
         "        println!(\"\\n==================== DEBUG TABLE ====================\");\n",
         
