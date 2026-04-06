@@ -88,6 +88,9 @@ for tick in eod:
 
 ## Streaming
 
+> [!WARNING]
+> FPSS streaming is **not yet production-ready**. The upstream FPSS server intermittently sends malformed frames under high subscription load, causing connection resets. The SDK handles this with auto-reconnect, but data gaps may occur. Historical data (MDDS) is fully production-ready.
+
 One connection, one auth. Historical available immediately, streaming connects lazily.
 
 ```rust
