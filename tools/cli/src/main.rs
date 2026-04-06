@@ -129,8 +129,18 @@ fn build_cli() -> Command {
 
             let mut sub_cmd = Command::new(sub_name).about(ep.description);
 
+            let mut seen_params = std::collections::HashSet::new();
+            let mut saw_optional = false;
             for p in ep.params {
-                sub_cmd = sub_cmd.arg(Arg::new(p.name).required(p.required).help(p.description));
+                if seen_params.insert(p.name) {
+                    // Once we see an optional param, all subsequent must be optional
+                    // (clap positional args don't allow required after optional).
+                    if !p.required {
+                        saw_optional = true;
+                    }
+                    let required = p.required && !saw_optional;
+                    sub_cmd = sub_cmd.arg(Arg::new(p.name).required(required).help(p.description));
+                }
             }
 
             cat_cmd = cat_cmd.subcommand(sub_cmd);
@@ -152,6 +162,11 @@ fn get_arg<'a>(m: &'a ArgMatches, name: &str) -> &'a str {
         || panic!("missing required argument: {name}"),
         std::string::String::as_str,
     )
+}
+
+/// Try to get a string arg, returning None if absent.
+fn try_arg<'a>(m: &'a ArgMatches, name: &str) -> Option<&'a str> {
+    m.get_one::<String>(name).map(std::string::String::as_str)
 }
 
 /// Parse comma-separated symbols into a `Vec<&str>`, filtering out empty entries.
@@ -421,7 +436,8 @@ async fn dispatch_endpoint(
         "option_history_ohlc" => {
             let (sym, exp, strike, right) = option_contract_args(m)?;
             let date = get_arg(m, "date");
-            let interval = get_arg(m, "interval");
+            let interval =
+                try_arg(m, "interval").unwrap_or(try_arg(m, "start_time").unwrap_or("60000"));
             let ticks = client
                 .option_history_ohlc(sym, exp, strike, right, date, interval)
                 .await?;
@@ -438,7 +454,8 @@ async fn dispatch_endpoint(
         "option_history_quote" => {
             let (sym, exp, strike, right) = option_contract_args(m)?;
             let date = get_arg(m, "date");
-            let interval = get_arg(m, "interval");
+            let interval =
+                try_arg(m, "interval").unwrap_or(try_arg(m, "start_time").unwrap_or("60000"));
             let ticks = client
                 .option_history_quote(sym, exp, strike, right, date, interval)
                 .await?;
