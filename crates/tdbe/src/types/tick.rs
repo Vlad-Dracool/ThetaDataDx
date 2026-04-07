@@ -141,6 +141,7 @@ pub struct OhlcTick {
     pub expiration: i32,
     pub strike: f64,
     pub right: i32,
+    pub vwap: f64,
 }
 
 /// Open interest tick.

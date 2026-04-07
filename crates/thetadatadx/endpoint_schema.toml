@@ -88,6 +88,7 @@ columns = [
     { name = "volume",     field = "volume",      type = "i32" },
     { name = "count",      field = "count",       type = "i32" },
     { name = "date",       field = "date",        type = "i32" },
+    { name = "vwap",       field = "vwap",        type = "price" },
 ]
 
 [types.EodTick]
