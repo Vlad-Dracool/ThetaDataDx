@@ -158,7 +158,9 @@ macro_rules! parsed_endpoint {
                         $($opt_name,)*
                     } = self;
                     let _ = &client;
-                    $($(validate_date(&$date_arg)?;)+)?
+                    // $($(validate_date(&$date_arg)?;)+)?
+                    // New line (ensure it passes the Option itself)
+                    $($( $date_arg.validate_format()?; )+)?
                     tracing::debug!(endpoint = stringify!($name), "gRPC request");
                     metrics::counter!("thetadatadx.grpc.requests", "endpoint" => stringify!($name)).increment(1);
                     let _metrics_start = std::time::Instant::now();
@@ -331,7 +333,8 @@ macro_rules! streaming_endpoint {
                     $($opt_name,)*
                 } = self;
                 let _ = &client;
-                $($(validate_date(&$date_arg)?;)+)?
+                // $($(validate_date(&$date_arg)?;)+)?
+                $($( $date_arg.validate_format()?; )+)?
                 tracing::debug!(endpoint = stringify!($name), "gRPC streaming request");
                 metrics::counter!("thetadatadx.grpc.requests", "endpoint" => stringify!($name)).increment(1);
                 let _metrics_start = std::time::Instant::now();
@@ -1578,12 +1581,13 @@ parsed_endpoint! {
 parsed_endpoint! {
     /// Fetch open interest history for an option contract.
     builder OptionHistoryOpenInterestBuilder;
-    fn option_history_open_interest(symbol: str, expiration: str, strike: str, right: str, date: str) -> Vec<OpenInterestTick>;
+    fn option_history_open_interest(symbol: str, expiration: str, strike: str, right: str) -> Vec<OpenInterestTick>;
     grpc: get_option_history_open_interest;
     request: OptionHistoryOpenInterestRequest;
     query: OptionHistoryOpenInterestRequestQuery {
         contract_spec: contract_spec!(symbol, expiration, strike, right),
-        date: Some(date.clone()),
+        // date: Some(date.clone()),
+        date: date.clone(),
         expiration: expiration.clone(),
         max_dte: max_dte,
         strike_range: strike_range,
@@ -1593,6 +1597,7 @@ parsed_endpoint! {
     parse: decode::parse_open_interest_ticks;
     dates: date;
     optional {
+        date: opt_str = None,
         max_dte: opt_i32 = None,
         strike_range: opt_i32 = None,
         start_date: opt_str = None,
@@ -2094,6 +2099,35 @@ parsed_endpoint! {
 ///
 /// If milliseconds are passed, they're converted to the nearest matching preset.
 /// If already a valid shorthand (contains 's', 'm', or 'h'), passed through as-is.
+
+pub trait DateValidator {
+    fn validate_format(&self) -> Result<(), Error>;
+}
+
+// Logic for when the date IS provided (Required fields)
+impl DateValidator for String {
+    fn validate_format(&self) -> Result<(), Error> {
+        if self == "*" { return Ok(()); }
+        
+        if self.len() != 8 || !self.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(Error::Config(format!(
+                "invalid date '{self}': expected YYYYMMDD or '*'"
+            )));
+        }
+        Ok(())
+    }
+}
+
+// Logic for when the date is an Option (Optional fields)
+impl DateValidator for Option<String> {
+    fn validate_format(&self) -> Result<(), Error> {
+        match self {
+            Some(date_str) => date_str.validate_format(), // Reuse the String logic above
+            None => Ok(()), // If it's missing, it's "valid" (range will be used)
+        }
+    }
+}
+
 fn normalize_interval(interval: &str) -> String {
     // If it already looks like shorthand (ends with s/m/h), pass through.
     if interval.ends_with('s') || interval.ends_with('m') || interval.ends_with('h') {
@@ -2133,6 +2167,7 @@ fn validate_date(date: &str) -> Result<(), Error> {
             "invalid date '{date}': expected YYYYMMDD format (8 digits)"
         )));
     }
+
     Ok(())
 }
 
