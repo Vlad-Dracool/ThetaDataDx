@@ -1425,12 +1425,12 @@ parsed_endpoint! {
 parsed_endpoint! {
     /// Fetch all trades for an option contract on a given date.
     builder OptionHistoryTradeBuilder;
-    fn option_history_trade(symbol: str, expiration: str, strike: str, right: str, date: str) -> Vec<TradeTick>;
+    fn option_history_trade(symbol: str, expiration: str, strike: str, right: str) -> Vec<TradeTick>;
     grpc: get_option_history_trade;
     request: OptionHistoryTradeRequest;
     query: OptionHistoryTradeRequestQuery {
         contract_spec: contract_spec!(symbol, expiration, strike, right),
-        date: Some(date.clone()),
+        date: date.clone(),
         expiration: expiration.clone(),
         start_time: Some(start_time.clone()),
         end_time: Some(end_time.clone()),
@@ -1442,6 +1442,7 @@ parsed_endpoint! {
     parse: decode::parse_trade_ticks;
     dates: date;
     optional {
+        date: opt_str = None,
         start_time: string = "09:30:00".to_string(),
         end_time: string = "16:00:00".to_string(),
         max_dte: opt_i32 = None,
@@ -1455,12 +1456,13 @@ parsed_endpoint! {
 parsed_endpoint! {
     /// Fetch NBBO quotes for an option contract on a given date.
     builder OptionHistoryQuoteBuilder;
-    fn option_history_quote(symbol: str, expiration: str, strike: str, right: str, date: str, interval: str) -> Vec<QuoteTick>;
+    fn option_history_quote(symbol: str, expiration: str, strike: str, right: str, interval: str) -> Vec<QuoteTick>;
     grpc: get_option_history_quote;
     request: OptionHistoryQuoteRequest;
     query: OptionHistoryQuoteRequestQuery {
         contract_spec: contract_spec!(symbol, expiration, strike, right),
-        date: Some(date.clone()),
+        // date: Some(date.clone()),
+        date: date.clone(),
         expiration: expiration.clone(),
         start_time: Some(start_time.clone()),
         end_time: Some(end_time.clone()),
@@ -1473,6 +1475,7 @@ parsed_endpoint! {
     parse: decode::parse_quote_ticks;
     dates: date;
     optional {
+        date: opt_str = None,
         start_time: string = "09:30:00".to_string(),
         end_time: string = "16:00:00".to_string(),
         max_dte: opt_i32 = None,
@@ -1549,12 +1552,12 @@ streaming_endpoint! {
 parsed_endpoint! {
     /// Fetch combined trade + quote ticks for an option contract.
     builder OptionHistoryTradeQuoteBuilder;
-    fn option_history_trade_quote(symbol: str, expiration: str, strike: str, right: str, date: str) -> Vec<TradeQuoteTick>;
+    fn option_history_trade_quote(symbol: str, expiration: str, strike: str, right: str) -> Vec<TradeQuoteTick>;
     grpc: get_option_history_trade_quote;
     request: OptionHistoryTradeQuoteRequest;
     query: OptionHistoryTradeQuoteRequestQuery {
         contract_spec: contract_spec!(symbol, expiration, strike, right),
-        date: Some(date.clone()),
+        date: date.clone(),
         expiration: expiration.clone(),
         start_time: Some(start_time.clone()),
         end_time: Some(end_time.clone()),
@@ -1567,6 +1570,7 @@ parsed_endpoint! {
     parse: decode::parse_trade_quote_ticks;
     dates: date;
     optional {
+        date: opt_str = None,
         start_time: string = "09:30:00".to_string(),
         end_time: string = "16:00:00".to_string(),
         exclusive: opt_bool = None,
