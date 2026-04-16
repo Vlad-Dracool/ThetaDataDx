@@ -1396,12 +1396,12 @@ parsed_endpoint! {
 parsed_endpoint! {
     /// Fetch intraday OHLC bars for an option contract.
     builder OptionHistoryOhlcBuilder;
-    fn option_history_ohlc(symbol: str, expiration: str, strike: str, right: str, date: str, interval: str) -> Vec<OhlcTick>;
+    fn option_history_ohlc(symbol: str, expiration: str, strike: str, right: str, interval: str) -> Vec<OhlcTick>;
     grpc: get_option_history_ohlc;
     request: OptionHistoryOhlcRequest;
     query: OptionHistoryOhlcRequestQuery {
         contract_spec: contract_spec!(symbol, expiration, strike, right),
-        date: Some(date.clone()),
+        date: date.clone(),
         expiration: expiration.clone(),
         interval: normalize_interval(&interval),
         start_time: Some(start_time.clone()),
@@ -1411,8 +1411,9 @@ parsed_endpoint! {
         end_date: end_date.clone(),
     };
     parse: decode::parse_ohlc_ticks;
-    dates: date;
+    dates: start_date, end_date;
     optional {
+        date: opt_str = None,
         start_time: string = "09:30:00".to_string(),
         end_time: string = "16:00:00".to_string(),
         strike_range: opt_i32 = None,
@@ -1685,6 +1686,47 @@ macro_rules! option_history_greeks_interval_endpoint {
     };
 }
 
+macro_rules! option_history_greeks_interval_endpoint_optional_date {
+    ($builder:ident, $name:ident, $grpc:ident, $req:ident, $query:ident, $ret:ty, $parser:expr, $doc:literal) => {
+        parsed_endpoint! {
+            #[doc = $doc]
+            builder $builder;
+            fn $name(symbol: str, expiration: str, strike: str, right: str, interval: str) -> $ret;
+            grpc: $grpc;
+            request: $req;
+            query: $query {
+                contract_spec: contract_spec!(symbol, expiration, strike, right),
+                date: date.clone(),
+                expiration: expiration.to_string(),
+                start_time: Some(start_time.clone()),
+                end_time: Some(end_time.clone()),
+                interval: normalize_interval(&interval),
+                annual_dividend: annual_dividend,
+                rate_type: rate_type.clone(),
+                rate_value: rate_value,
+                version: version.clone(),
+                strike_range: strike_range,
+                start_date: start_date.clone(),
+                end_date: end_date.clone(),
+            };
+            parse: $parser;
+            dates: start_date, end_date;
+            optional {
+                date: opt_str = None,
+                start_time: string = "09:30:00".to_string(),
+                end_time: string = "16:00:00".to_string(),
+                strike_range: opt_i32 = None,
+                start_date: opt_str = None,
+                end_date: opt_str = None,
+                annual_dividend: opt_f64 = None,
+                rate_type: opt_str = None,
+                rate_value: opt_f64 = None,
+                version: opt_str = None,
+            }
+        }
+    };
+}
+
 // Helper macro for option history trade-greeks endpoints (no interval)
 macro_rules! option_history_trade_greeks_endpoint {
     ($builder:ident, $name:ident, $grpc:ident, $req:ident, $query:ident, $ret:ty, $parser:expr, $doc:literal) => {
@@ -1752,7 +1794,7 @@ option_history_trade_greeks_endpoint!(
 );
 
 // 38. GetOptionHistoryGreeksFirstOrder
-option_history_greeks_interval_endpoint!(
+option_history_greeks_interval_endpoint_optional_date!(
     OptionHistoryGreeksFirstOrderBuilder,
     option_history_greeks_first_order,
     get_option_history_greeks_first_order,
@@ -1824,7 +1866,7 @@ option_history_trade_greeks_endpoint!(
 );
 
 // 44. GetOptionHistoryGreeksImpliedVolatility
-option_history_greeks_interval_endpoint!(
+option_history_greeks_interval_endpoint_optional_date!(
     OptionHistoryGreeksIvBuilder,
     option_history_greeks_implied_volatility,
     get_option_history_greeks_implied_volatility,
